@@ -4,14 +4,133 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vikenes MC</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+    }
+
+    header {
+      background: #000;
+      padding: 20px;
+      text-align: center;
+      border-bottom: 2px solid #555;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 42px;
+    }
+
+    nav {
+      margin-top: 15px;
+    }
+
+    nav a {
+      color: #fff;
+      text-decoration: none;
+      margin: 0 12px;
+      font-weight: bold;
+    }
+
+    .hero {
+      min-height: 420px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+      background: linear-gradient(#181818, #0b0b0b);
+    }
+
+    .hero h2 {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    .hero p {
+      font-size: 20px;
+      color: #ccc;
+    }
+
+    .quiz-button {
+      display: inline-block;
+      margin-top: 25px;
+      padding: 15px 30px;
+      background: #fff;
+      color: #111;
+      text-decoration: none;
+      font-weight: bold;
+      border-radius: 6px;
+      font-size: 18px;
+    }
+
+    .about {
+      max-width: 900px;
+      margin: auto;
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    footer {
+      background: #000;
+      text-align: center;
+      padding: 20px;
+      color: #888;
+    }
+  </style>
 </head>
 
 <body>
 
-  <h1>Vikenes MC</h1>
-  <p>Velkommen til Vikenes MC</p>
+  <header>
+    <h1>Vikenes MC</h1>
 
-  <button>MC Quiz</button>
+    <nav>
+      <a href="#">Heim</a>
+      <a href="#om">Om oss</a>
+      <a href="#">Galleri</a>
+      <a href="#quiz">MC Quiz</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div>
+      <h2>Vikenes MC</h2>
+      <p>MC-klubb frå Volda</p>
+
+      <a class="quiz-button" href="#quiz">
+        MC Quiz
+      </a>
+    </div>
+  </section>
+
+  <section class="about" id="om">
+    <h2>Om Vikenes MC</h2>
+    <p>
+      Vikenes MC er ein lokal motorsykkelklubb i Volda.
+      Klubben starta som Afterbike og fekk namnet Vikenes MC i 2011.
+    </p>
+  </section>
+
+  <section class="about" id="quiz">
+    <h2>MC Quiz</h2>
+    <p>
+      Delta på Vikenes MC sin MC Quiz.
+      Registrering, grupper, postar og spørsmål blir styrt digitalt.
+    </p>
+
+    <a class="quiz-button" href="#">
+      Start MC Quiz
+    </a>
+  </section>
+
+  <footer>
+    © Vikenes MC
+  </footer>
 
 </body>
 </html>
