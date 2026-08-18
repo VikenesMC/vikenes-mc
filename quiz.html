@@ -61,9 +61,39 @@
         Her startar Vikenes MC sin MC Quiz.
       </p>
 
-      <button class="start-button">
-        Start quiz
-      </button>
+     <button class="start-button" onclick="showRegistration()">
+  Start quiz
+</button>
+
+<div id="registration" style="display:none; margin-top:25px;">
+  <h2>Registrering</h2>
+
+  <label for="name">Namn</label>
+  <input
+    id="name"
+    type="text"
+    placeholder="Skriv namnet ditt"
+    style="width:100%; padding:14px; margin:8px 0 18px; box-sizing:border-box;"
+  >
+
+  <label for="phone">Telefonnummer</label>
+  <input
+    id="phone"
+    type="tel"
+    placeholder="Telefonnummer"
+    style="width:100%; padding:14px; margin:8px 0 18px; box-sizing:border-box;"
+  >
+
+  <button class="start-button">
+    Registrer
+  </button>
+</div>
+
+<script>
+  function showRegistration() {
+    document.getElementById("registration").style.display = "block";
+  }
+</script>
     </div>
   </div>
 
