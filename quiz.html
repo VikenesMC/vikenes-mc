@@ -84,15 +84,49 @@
     style="width:100%; padding:14px; margin:8px 0 18px; box-sizing:border-box;"
   >
 
-  <button class="start-button">
-    Registrer
-  </button>
+  <button class="start-button" onclick="registerParticipant()">
+  Registrer
+</button>
 </div>
 
 <script>
   function showRegistration() {
     document.getElementById("registration").style.display = "block";
   }
+  async function registerParticipant() {
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+
+  if (!name || !phone) {
+    alert("Fyll inn namn og telefonnummer.");
+    return;
+  }
+
+  const response = await fetch(
+    "https://yrozxcxjqxfwbbdwlwwi.supabase.co/rest/v1/participants",
+    {
+      method: "POST",
+      headers: {
+        "apikey": "sb_publishable_eb4NTorneozNeCZU7GnGFQ_ybS53nn5",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({
+        name: name,
+        phone: phone,
+        event_id: 1,
+        paid: false
+      })
+    }
+  );
+
+  if (response.ok) {
+    alert("Registreringa er lagra!");
+  } else {
+    const errorText = await response.text();
+    alert("Noko gjekk gale: " + errorText);
+  }
+}
 </script>
     </div>
   </div>
