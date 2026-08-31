@@ -148,9 +148,9 @@ async function markPaid(id) {
 }
 
     loadParticipants();
-  async function distributeGroups() {
+async function distributeGroups() {
   const response = await fetch(
-    SUPABASE_URL + "/rest/v1/participants?select=id&event_id=eq.1&paid=eq.true",
+    SUPABASE_URL + "/rest/v1/participants?select=id&event_id=eq.1&paid=eq.true&order=id.asc",
     {
       headers: {
         "apikey": SUPABASE_KEY
@@ -171,17 +171,82 @@ async function markPaid(id) {
     return;
   }
 
-  let groups;
+  let numberOfGroups;
 
   if (count <= 70) {
-    groups = Math.min(7, Math.max(1, Math.floor(count / 4)));
+    numberOfGroups = Math.min(7, Math.max(1, Math.floor(count / 4)));
   } else {
-    groups = Math.ceil(count / 10);
+    numberOfGroups = Math.ceil(count / 10);
+  }
+
+  const existingResponse = await fetch(
+    SUPABASE_URL + "/rest/v1/groups?select=id&event_id=eq.1&limit=1",
+    {
+      headers: {
+        "apikey": SUPABASE_KEY
+      }
+    }
+  );
+
+  const existingGroups = await existingResponse.json();
+
+  if (existingGroups.length > 0) {
+    alert("Det er allereie oppretta grupper for dette arrangementet.");
+    return;
+  }
+
+  const firstStartTime =
+    document.getElementById("firstStartTime").value;
+
+  const [startHour, startMinute] =
+    firstStartTime.split(":").map(Number);
+
+  const groups = [];
+
+  for (let i = 0; i < numberOfGroups; i++) {
+    const totalMinutes =
+      startHour * 60 + startMinute + i * 10;
+
+    const hour =
+      Math.floor(totalMinutes / 60) % 24;
+
+    const minute =
+      totalMinutes % 60;
+
+    const startTime =
+      String(hour).padStart(2, "0") +
+      ":" +
+      String(minute).padStart(2, "0");
+
+    groups.push({
+      name: "Gruppe " + (i + 1),
+      start_time: startTime,
+      event_id: 1
+    });
+  }
+
+  const groupResponse = await fetch(
+    SUPABASE_URL + "/rest/v1/groups",
+    {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+      },
+      body: JSON.stringify(groups)
+    }
+  );
+
+  if (!groupResponse.ok) {
+    const errorText = await groupResponse.text();
+    alert("Klarte ikkje å opprette gruppene: " + errorText);
+    return;
   }
 
   alert(
-    count + " betalte deltakarar blir fordelte på " +
-    groups + " grupper."
+    numberOfGroups +
+    " grupper er oppretta med 10 minutt mellom startane."
   );
 }
 
