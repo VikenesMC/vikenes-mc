@@ -107,8 +107,28 @@
         `).join("");
     }
 
-    async function markPaid(id) {
-      alert("Neste steg blir å kople denne knappen til betaling.");
+async function markPaid(id) {
+  const response = await fetch(
+    SUPABASE_URL + "/rest/v1/participants?id=eq." + id,
+    {
+      method: "PATCH",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({
+        paid: true
+      })
+    }
+  );
+
+  if (response.ok) {
+    loadParticipants();
+  } else {
+    alert("Klarte ikkje å registrere betaling.");
+  }
+}
     }
 
     loadParticipants();
