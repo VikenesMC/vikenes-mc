@@ -148,7 +148,42 @@ async function markPaid(id) {
 }
 
     loadParticipants();
-  </script>
+  async function distributeGroups() {
+  const response = await fetch(
+    SUPABASE_URL + "/rest/v1/participants?select=id&event_id=eq.1&paid=eq.true",
+    {
+      headers: {
+        "apikey": SUPABASE_KEY
+      }
+    }
+  );
+
+  if (!response.ok) {
+    alert("Klarte ikkje å hente betalte deltakarar.");
+    return;
+  }
+
+  const participants = await response.json();
+  const count = participants.length;
+
+  if (count === 0) {
+    alert("Ingen betalte deltakarar enno.");
+    return;
+  }
+
+  let groups;
+
+  if (count <= 70) {
+    groups = Math.min(7, Math.max(1, Math.floor(count / 4)));
+  } else {
+    groups = Math.ceil(count / 10);
+  }
+
+  alert(
+    count + " betalte deltakarar blir fordelte på " +
+    groups + " grupper."
+  );
+}
 
 </body>
 </html>
