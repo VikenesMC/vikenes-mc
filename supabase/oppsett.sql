@@ -492,5 +492,80 @@ grant execute on function public.screen_data() to anon, authenticated;
 grant execute on function public.distribute_groups(timestamptz) to authenticated;
 grant execute on function public.ny_kode(int) to authenticated;
 
+-- =====================================================================
+-- Tillegg 2026-11-23: namn på skjermen + nullstilling
+-- =====================================================================
+
+-- Kort namn for skjermen: «Ola Nordmann» → «Ola N.»
+create or replace function public._kort_namn(p text)
+returns text language sql immutable as $$
+  select case
+    when array_length(regexp_split_to_array(trim(p), '\s+'), 1) > 1
+      then split_part(trim(p), ' ', 1) || ' ' ||
+           upper(left((regexp_split_to_array(trim(p), '\s+'))[array_length(regexp_split_to_array(trim(p), '\s+'), 1)], 1)) || '.'
+    else trim(p)
+  end
+$$;
+
+-- Vindusskjermen: no òg med kortnamn på medlemmane
+create or replace function public.screen_data()
+returns json language plpgsql stable security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_total int;
+begin
+  select count(*) into v_total from public._route_stops(v_event);
+  return json_build_object(
+    'now', now(),
+    'stops_total', v_total,
+    'groups', coalesce((
+      select json_agg(json_build_object(
+               'name', g.name,
+               'position', g.position,
+               'start_at', g.start_at,
+               'finished', g.finished_at is not null,
+               'points', public._group_points(g.id),
+               'stops_handled', (select count(*) from public.group_stops gs where gs.group_id = g.id),
+               'members', coalesce((select json_agg(public._kort_namn(p.name) order by p.name)
+                                      from public.participants p where p.group_id = g.id), '[]'::json)
+             ) order by g.position)
+        from public.groups g
+       where g.event_id = v_event
+    ), '[]'::json)
+  );
+end $$;
+
+-- Nullstill løpet (berre admin).
+--   p_slett_grupper = false: behald gruppene, fjern svar/postar/mål/leiarkopling
+--   p_slett_grupper = true:  fjern òg gruppene (deltakarane blir verande)
+create or replace function public.reset_race(p_slett_grupper boolean default false)
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_svar int;
+  v_grupper int;
+begin
+  if not public.is_admin() then
+    raise exception 'Berre admin';
+  end if;
+  select count(*) into v_svar from public.group_answers a join public.groups g on g.id = a.group_id where g.event_id = v_event;
+  delete from public.group_answers a using public.groups g where g.id = a.group_id and g.event_id = v_event;
+  delete from public.group_stops s using public.groups g where g.id = s.group_id and g.event_id = v_event;
+  update public.groups
+     set leader_token = null, bind_token = null, leader_participant_id = null, finished_at = null
+   where event_id = v_event;
+  select count(*) into v_grupper from public.groups where event_id = v_event;
+  if p_slett_grupper then
+    update public.participants set group_id = null where event_id = v_event;
+    delete from public.groups where event_id = v_event;
+  end if;
+  return json_build_object('svar_sletta', v_svar, 'grupper', v_grupper, 'grupper_sletta', p_slett_grupper);
+end $$;
+
+revoke all on function public._kort_namn(text) from public, anon, authenticated;
+revoke all on function public.reset_race(boolean) from public, anon;
+grant execute on function public.reset_race(boolean) to authenticated;
+grant execute on function public.screen_data() to anon, authenticated;
+
 -- Admin-brukaren: legg inn e-posten i ein eigen, separat kommando (ikkje i denne fila):
 --   insert into public.admins (email) values ('<klubben sin e-post>') on conflict do nothing;
