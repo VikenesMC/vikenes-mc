@@ -15,7 +15,8 @@
         <h1>MC Quiz Admin</h1>
       </div>
       <div class="rad" id="toppknappar" style="display:none">
-        <a class="knapp sekundar liten" href="skjerm.html" target="_blank">Opne skjerm</a>
+        <a class="knapp sekundar liten" href="skjerm.html" target="_blank">Skjerm ute</a>
+        <a class="knapp sekundar liten" href="skjerm.html?inne" target="_blank">Skjerm inne</a>
         <a class="knapp sekundar liten" href="utskrift.html" target="_blank">Skriv ut QR-kodar</a>
         <button class="sekundar liten" onclick="loggUt()">Logg ut</button>
       </div>
@@ -436,8 +437,18 @@
           <input id="forsteStart" type="datetime-local" value="${standardStart()}" style="max-width:280px">
           <button onclick="fordelGrupper()" ${iGang ? "disabled" : ""}>${D.grupper.length ? "Fordel grupper på nytt" : "Fordel grupper"}</button>
           <p class="dempa">Ca. 5 per gruppe, minst 2 og maks 13 grupper, tilfeldig blanda. ${MIN_PER_POST} min mellom kvar start.
-            ${iGang ? "<br><b>Gruppene er i gang og kan ikkje fordelast på nytt.</b>" : ""}</p>
+            ${iGang ? "<br><b>Gruppene er i gang. Nullstill under for å fordele på nytt.</b>" : ""}</p>
         </div>
+
+        ${D.grupper.length ? `
+        <div class="kort">
+          <b>Nullstill løpet</b>
+          <p class="dempa" style="margin:6px 0 0">Brukast etter ein prøvetur, eller om ruta er endra medan grupper var ute. Deltakarane og postane blir verande.</p>
+          <div class="rad" style="margin-top:10px">
+            <button class="sekundar" onclick="nullstill(false)">Nullstill framdrift (behald gruppene)</button>
+            <button class="fare" onclick="nullstill(true)">Slett gruppene og start på nytt</button>
+          </div>
+        </div>` : ""}
 
         ${utanGruppe.length && D.grupper.length ? `<div class="kort vars">Betalt men utan gruppe: ${utanGruppe.map(p => esc(p.name)).join(", ")} – set gruppe under Deltakarar.</div>` : ""}
 
@@ -474,6 +485,20 @@
         const r = await rpc("distribute_groups", { p_first_start: new Date(verdi).toISOString() });
         await oppdater();
         alert(`${r.participants} deltakarar fordelte i ${r.groups} grupper.`);
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function nullstill(slettGrupper) {
+      const tekst = slettGrupper
+        ? "Alle svar, poeng og leiarar blir sletta, og gruppene blir fjerna. Deltakarane blir verande, og du kan fordele grupper på nytt.\n\nDette kan ikkje angrast. Halde fram?"
+        : "Alle svar, poeng, mål og leiarkoplingar blir sletta. Gruppene og medlemmene blir verande, men alle leiarar må koplast på nytt.\n\nDette kan ikkje angrast. Halde fram?";
+      if (!confirm(tekst)) return;
+      try {
+        const r = await rpc("reset_race", { p_slett_grupper: slettGrupper });
+        await oppdater();
+        alert(`Nullstilt. ${r.svar_sletta} svar sletta${slettGrupper ? `, ${r.grupper} grupper fjerna` : ""}.`);
       } catch (e) {
         alert(e.message);
       }

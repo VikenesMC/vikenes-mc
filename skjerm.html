@@ -7,124 +7,226 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
   <link rel="stylesheet" href="stil.css">
   <style>
+    /* To visningar:
+         skjerm.html        – UTE (vindauget): klokke, neste og deretter-gruppe med namn, poengtavle
+         skjerm.html?inne   – INNE (der alle står): alle gruppene med namn, starttid og status */
     body { overflow: hidden; }
-    .skjerm { display: grid; grid-template-columns: 1fr 1.3fr; gap: 3vw; padding: 3vw; height: 100vh; }
-    .venstre { display: flex; flex-direction: column; justify-content: center; text-align: center; }
-    .klokke { font-size: 16vw; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1; }
-    .tittel { font-size: 4vw; margin-bottom: 1.5vw; }
-    .stripe { padding: 1vw 0; }
-    .stripe .vinge { max-width: 40vw; }
-    .skjerm { height: calc(100vh - 16.3vw); padding-top: 1.5vw; }
-    .tavle h2 { font-family: "UnifrakturCook", "Old English Text MT", serif; }
-    .neste { margin-top: 3vw; font-size: 3vw; }
-    .nedtelling { font-size: 7vw; font-weight: bold; color: var(--gul); font-variant-numeric: tabular-nums; }
-    .tavle { background: var(--kort); border-radius: 1.2vw; padding: 2vw; overflow: hidden; }
+    .fraktur-h { font-family: "UnifrakturCook", "Old English Text MT", serif; }
+    .stripe { padding: .8vw 0; }
+    .stripe .vinge { max-width: 34vw; }
+    .tal { font-variant-numeric: tabular-nums; }
+
+    /* ---------- UTE ---------- */
+    .ute { display: grid; grid-template-columns: 1.15fr 1fr; gap: 2.5vw; padding: 1.5vw 3vw 3vw; height: calc(100vh - 13.8vw); }
+    .venstre { display: flex; flex-direction: column; justify-content: center; gap: 1.4vw; min-height: 0; }
+    .klokke { font-size: 9vw; font-weight: bold; line-height: 1; text-align: center; }
+    .gruppekort { background: var(--kort); border-radius: 1vw; padding: 1.4vw 1.8vw; border-left: .6vw solid var(--oransje); }
+    .gruppekort.deretter { border-left-color: #555; }
+    .gruppekort .etikett { font-size: 1.5vw; color: var(--dempa); text-transform: uppercase; letter-spacing: .1vw; }
+    .gruppekort .gnamn { font-size: 3.4vw; font-weight: bold; }
+    .gruppekort .nedtelling { font-size: 4.6vw; font-weight: bold; color: var(--oransje); }
+    .gruppekort .namn { font-size: 2.1vw; margin-top: .4vw; }
+    .gruppekort.deretter .gnamn { font-size: 2.6vw; }
+    .gruppekort.deretter .namn { font-size: 1.7vw; color: var(--dempa); }
+    .melding { font-size: 3vw; text-align: center; }
+
+    .tavle { background: var(--kort); border-radius: 1.2vw; padding: 2vw; overflow: hidden; border-top: .4vw solid var(--oransje); }
     .tavle h2 { margin: 0 0 1vw; font-size: 2.6vw; }
     .tavle table { font-size: 2vw; }
     .tavle td, .tavle th { padding: .7vw .5vw; }
     .plass { width: 4vw; font-weight: bold; }
-    .poeng { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; }
+    .poeng { text-align: right; font-weight: bold; }
     .likt { font-size: 1.2vw; }
+
+    /* ---------- INNE ---------- */
+    .inne { padding: 1.2vw 2.5vw 2vw; height: calc(100vh - 13.8vw); display: flex; flex-direction: column; gap: 1.2vw; }
+    .inne-topp { display: flex; justify-content: space-between; align-items: baseline; gap: 2vw; }
+    .inne-topp .klokke { font-size: 4.5vw; text-align: left; }
+    .inne-topp .neste-linje { font-size: 2.4vw; }
+    .inne-topp .neste-linje b { color: var(--oransje); }
+    /* 5 kolonnar: 13 grupper (maks) får plass på tre rader */
+    .rutenett { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1vw; align-content: start; overflow: hidden; }
+    .gk { background: var(--kort); border-radius: .8vw; padding: .7vw 1vw; border-top: .3vw solid #444; }
+    .gk.neste { border-top-color: var(--oransje); box-shadow: 0 0 0 .2vw var(--oransje); }
+    .gk .rad1 { display: flex; justify-content: space-between; align-items: baseline; gap: 1vw; }
+    .gk .gnamn { font-size: 1.7vw; font-weight: bold; }
+    .gk .tid { font-size: 1.6vw; color: var(--oransje); font-weight: bold; }
+    .gk .namn { font-size: 1.25vw; margin: .4vw 0; line-height: 1.3; }
+    .gk .status { font-size: 1vw; }
+
     @media (max-width: 800px) {
       body { overflow: auto; }
-      .skjerm { grid-template-columns: 1fr; height: auto; }
-      .klokke { font-size: 22vw; }
+      .ute, .inne { height: auto; grid-template-columns: 1fr; }
+      .klokke { font-size: 18vw; }
       .tavle table { font-size: 16px; }
+      .rutenett { grid-template-columns: 1fr; }
+      .gk .gnamn, .gk .tid { font-size: 20px; } .gk .namn { font-size: 16px; } .gk .status { font-size: 14px; }
+      .gruppekort .gnamn { font-size: 24px; } .gruppekort .namn { font-size: 17px; } .gruppekort .nedtelling { font-size: 32px; }
+      .gruppekort .etikett { font-size: 13px; } .inne-topp .neste-linje { font-size: 18px; }
     }
   </style>
 </head>
 <body ondblclick="document.documentElement.requestFullscreen && document.documentElement.requestFullscreen()">
   <div class="stripe"><img class="vinge" src="vinge-logo.png" alt="Vikenes MC"></div>
-  <div class="skjerm">
-    <div class="venstre">
-      <div class="tittel fraktur">MC Quiz</div>
-      <div class="klokke" id="klokke">--:--:--</div>
-      <div class="neste" id="neste"></div>
-    </div>
-    <div class="tavle">
-      <h2>Poengtavle</h2>
-      <table id="tavle"></table>
-    </div>
-  </div>
+  <div id="visning"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
   <script src="felles.js"></script>
   <script>
     // Dobbeltklikk = fullskjerm. Hentar data kvart 5. sekund.
+    const INNE = new URLSearchParams(location.search).has("inne");
     let data = null;
     let tidsavvik = 0; // serverklokke minus PC-klokke
 
-    function na() { return new Date(Date.now() + tidsavvik); }
+    const na = () => new Date(Date.now() + tidsavvik);
+    const to = n => String(n).padStart(2, "0");
+    const klokke = t => `${to(t.getHours())}:${to(t.getMinutes())}:${to(t.getSeconds())}`;
+    const namnliste = g => (g.members && g.members.length) ? g.members.map(esc).join(", ") : "<span class='dempa'>Ingen medlemmer</span>";
 
-    function to(n) { return String(n).padStart(2, "0"); }
+    function nedtelling(sek) {
+      return sek >= 3600
+        ? `${Math.floor(sek / 3600)}:${to(Math.floor(sek / 60) % 60)}:${to(sek % 60)}`
+        : `${to(Math.floor(sek / 60))}:${to(sek % 60)}`;
+    }
 
-    function teikn() {
-      const t = na();
-      document.getElementById("klokke").textContent =
-        `${to(t.getHours())}:${to(t.getMinutes())}:${to(t.getSeconds())}`;
-
-      if (!data) return;
-      const neste = data.groups
+    // Gruppene som ikkje har starta enno, i startrekkjefølgje
+    function ventande(t) {
+      return data.groups
         .filter(g => g.start_at && new Date(g.start_at) > t)
-        .sort((a, b) => new Date(a.start_at) - new Date(b.start_at))[0];
+        .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
+    }
 
-      const el = document.getElementById("neste");
+    function statusMerke(g, t) {
+      if (g.finished) return `<span class="merke gronn">I mål</span>`;
+      if (!g.start_at || new Date(g.start_at) > t) return `<span class="merke">Ventar</span>`;
+      return `<span class="merke gul">Ute · post ${g.stops_handled}/${data.stops_total}</span>`;
+    }
+
+    // ---------------- UTE ----------------
+    function byggUte() {
+      document.getElementById("visning").innerHTML = `
+        <div class="ute">
+          <div class="venstre">
+            <div class="klokke tal" id="klokke">--:--:--</div>
+            <div id="grupper"></div>
+          </div>
+          <div class="tavle">
+            <h2 class="fraktur-h">Poengtavle</h2>
+            <table id="tavle"></table>
+          </div>
+        </div>`;
+    }
+
+    function teiknUte() {
+      const t = na();
+      document.getElementById("klokke").textContent = klokke(t);
+      if (!data) return;
+      const v = ventande(t);
+      const el = document.getElementById("grupper");
+
       if (data.groups.length === 0) {
-        el.innerHTML = `Gruppene er ikkje fordelte enno`;
-      } else if (neste) {
+        el.innerHTML = `<div class="melding">Gruppene er ikkje fordelte enno</div>`;
+      } else if (v.length) {
+        const [neste, deretter] = v;
         const sek = Math.max(0, Math.round((new Date(neste.start_at) - t) / 1000));
-        const tekst = sek >= 3600
-          ? `${Math.floor(sek / 3600)}:${to(Math.floor(sek / 60) % 60)}:${to(sek % 60)}`
-          : `${to(Math.floor(sek / 60))}:${to(sek % 60)}`;
-        el.innerHTML = `<div>${esc(neste.name)} startar om</div><div class="nedtelling">${tekst}</div>
-          <div class="dempa">kl. ${klokkeslett(neste.start_at)}</div>`;
+        el.innerHTML = `
+          <div class="gruppekort">
+            <div class="etikett">Neste ut · kl. ${klokkeslett(neste.start_at)}</div>
+            <div class="rad" style="justify-content:space-between">
+              <span class="gnamn">${esc(neste.name)}</span>
+              <span class="nedtelling tal">${nedtelling(sek)}</span>
+            </div>
+            <div class="namn">${namnliste(neste)}</div>
+          </div>
+          ${deretter ? `
+          <div class="gruppekort deretter">
+            <div class="etikett">Deretter · kl. ${klokkeslett(deretter.start_at)}</div>
+            <div class="gnamn">${esc(deretter.name)}</div>
+            <div class="namn">${namnliste(deretter)}</div>
+          </div>` : ""}`;
       } else if (data.groups.every(g => g.finished)) {
-        el.innerHTML = `<div class="ok">Alle gruppene er i mål! 🏁</div>`;
+        el.innerHTML = `<div class="melding ok">Alle gruppene er i mål! 🏁</div>`;
       } else {
-        el.innerHTML = `<div>Alle gruppene er ute</div>`;
+        el.innerHTML = `<div class="melding">Alle gruppene er ute</div>`;
       }
     }
 
     function tavle() {
       const t = na();
       const grupper = [...data.groups].sort((a, b) => b.points - a.points || a.position - b.position);
-      // Plass: like poeng = same plass
       let plass = 0, forrige = null;
       const telling = {};
       grupper.forEach(g => { telling[g.points] = (telling[g.points] || 0) + 1; });
       const rader = grupper.map((g, i) => {
         if (g.points !== forrige) { plass = i + 1; forrige = g.points; }
-        let status;
-        if (g.finished) status = `<span class="merke gronn">I mål</span>`;
-        else if (!g.start_at || new Date(g.start_at) > t) status = `<span class="merke">Start ${klokkeslett(g.start_at)}</span>`;
-        else status = `<span class="merke gul">Post ${g.stops_handled}/${data.stops_total}</span>`;
-        const likt = telling[g.points] > 1 && g.points !== 0
-          ? ` <span class="merke raud likt">likt</span>` : "";
+        const likt = telling[g.points] > 1 && g.points !== 0 ? ` <span class="merke raud likt">likt</span>` : "";
         return `<tr>
           <td class="plass">${plass}.</td>
           <td>${esc(g.name)}${likt}</td>
-          <td>${status}</td>
-          <td class="poeng">${g.points}</td>
+          <td>${statusMerke(g, t)}</td>
+          <td class="poeng tal">${g.points}</td>
         </tr>`;
       }).join("");
-      document.getElementById("tavle").innerHTML = rader ||
-        `<tr><td class="dempa">Ingen grupper enno</td></tr>`;
+      document.getElementById("tavle").innerHTML = rader || `<tr><td class="dempa">Ingen grupper enno</td></tr>`;
     }
 
+    // ---------------- INNE ----------------
+    function byggInne() {
+      document.getElementById("visning").innerHTML = `
+        <div class="inne">
+          <div class="inne-topp">
+            <div class="klokke tal" id="klokke">--:--:--</div>
+            <div class="neste-linje" id="nesteLinje"></div>
+          </div>
+          <div class="rutenett" id="rutenett"></div>
+        </div>`;
+    }
+
+    function teiknInne() {
+      const t = na();
+      document.getElementById("klokke").textContent = klokke(t);
+      if (!data) return;
+      const v = ventande(t);
+      const neste = v[0];
+      const linje = document.getElementById("nesteLinje");
+      if (data.groups.length === 0) linje.textContent = "Gruppene er ikkje fordelte enno";
+      else if (neste) linje.innerHTML = `Neste ut: <b>${esc(neste.name)}</b> om <b class="tal">${nedtelling(Math.max(0, Math.round((new Date(neste.start_at) - t) / 1000)))}</b>`;
+      else if (data.groups.every(g => g.finished)) linje.innerHTML = `<span class="ok">Alle gruppene er i mål! 🏁</span>`;
+      else linje.textContent = "Alle gruppene er ute";
+    }
+
+    function kortInne() {
+      const t = na();
+      const neste = ventande(t)[0];
+      const grupper = [...data.groups].sort((a, b) => a.position - b.position);
+      document.getElementById("rutenett").innerHTML = grupper.map(g => `
+        <div class="gk ${neste && neste.name === g.name ? "neste" : ""}">
+          <div class="rad1">
+            <span class="gnamn">${esc(g.name)}</span>
+            <span class="tid tal">${klokkeslett(g.start_at)}</span>
+          </div>
+          <div class="namn">${namnliste(g)}</div>
+          <div class="status">${statusMerke(g, t)} ${g.start_at && new Date(g.start_at) <= t ? `<span class="dempa">${g.points} poeng</span>` : ""}</div>
+        </div>`).join("");
+    }
+
+    // ---------------- Felles ----------------
     async function hentData() {
       try {
         data = await rpc("screen_data");
         tidsavvik = new Date(data.now) - Date.now();
-        tavle();
-        teikn();
+        if (INNE) { kortInne(); teiknInne(); } else { tavle(); teiknUte(); }
       } catch (e) {
         console.error(e);
       }
     }
 
+    if (INNE) byggInne(); else byggUte();
     hentData();
     setInterval(hentData, 5000);
-    setInterval(teikn, 250);
+    setInterval(INNE ? teiknInne : teiknUte, 250);
+    // Kort/tavle oppdaterer status når ei gruppe startar, sjølv mellom hentingane
+    setInterval(() => { if (data) { if (INNE) kortInne(); else tavle(); } }, 1000);
   </script>
 </body>
 </html>
