@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MC Quiz – QR-kodar</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #ddd; color: #111; }
+    .side .logo { width: 45mm; display: block; margin: 0 auto 4mm; }
+    .side h1, .side h2 { font-family: "UnifrakturCook", "Old English Text MT", serif; }
+    .verktoy { padding: 16px; background: #111; color: #fff; }
+    .verktoy button { padding: 10px 16px; font-size: 16px; font-weight: bold; }
+    .side {
+      background: #fff;
+      width: 210mm; min-height: 297mm;
+      margin: 10mm auto; padding: 20mm;
+      box-sizing: border-box;
+      text-align: center;
+      page-break-after: always;
+    }
+    .side h1 { font-size: 40px; margin: 0 0 6mm; }
+    .side h2 { font-size: 64px; margin: 0 0 8mm; }
+    .side .qr img, .side .qr canvas { width: 105mm !important; height: 105mm !important; }
+    .side .qr { display: inline-block; padding: 6mm; border: 2px solid #111; }
+    .side .qr img, .side .qr canvas { width: 120mm !important; height: 120mm !important; }
+    .side p { font-size: 22px; }
+    @media print {
+      body { background: #fff; }
+      .verktoy { display: none; }
+      .side { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="verktoy">
+    <button onclick="print()">Skriv ut</button>
+    <span id="info" style="margin-left:12px">Lastar …</span>
+  </div>
+  <div id="sider"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="felles.js"></script>
+  <script>
+    // Krev admin-innlogging (postkodane er hemmelege).
+    async function start() {
+      const { data } = await db.auth.getSession();
+      if (!data.session || !(await rpc("is_admin"))) {
+        document.getElementById("info").innerHTML = 'Du må vere logga inn. <a href="admin.html" style="color:#fff">Gå til admin</a>';
+        return;
+      }
+      const eventId = await rpc("current_event_id");
+      const { data: ev } = await db.from("events").select("*").eq("id", eventId).single();
+      const { data: postar } = await db.from("stops").select("*").eq("event_id", eventId).order("id");
+
+      const sider = [
+        { overskrift: "MC Quiz", namn: "Påmelding", url: BASE_URL + "quiz.html",
+          tekst: "Skann med kameraet på mobilen og meld deg på." },
+        ...postar.map(p => ({ overskrift: "MC Quiz – post", namn: p.name, url: BASE_URL + "leiar.html?post=" + p.code,
+          tekst: "Berre leiaren i gruppa skannar." })),
+        { overskrift: "MC Quiz – mål", namn: "I mål! 🏁", url: BASE_URL + "leiar.html?post=" + ev.finish_code,
+          tekst: "Leiaren skannar når gruppa er tilbake på klubben." },
+      ];
+
+      const boks = document.getElementById("sider");
+      sider.forEach((s, i) => {
+        const div = document.createElement("div");
+        div.className = "side";
+        div.innerHTML = `<img class="logo" src="logo.png" alt=""><h1>${esc(s.overskrift)}</h1><h2>${esc(s.namn)}</h2>
+          <div class="qr" id="qr${i}"></div><p>${esc(s.tekst)}</p>`;
+        boks.appendChild(div);
+        new QRCode(document.getElementById("qr" + i), { text: s.url, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
+      });
+      document.getElementById("info").textContent = `${sider.length} sider: påmelding, ${postar.length} postar og mål.`;
+    }
+
+    start().catch(e => { document.getElementById("info").textContent = "Feil: " + e.message; });
+  </script>
+</body>
+</html>

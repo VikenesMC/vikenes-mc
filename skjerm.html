@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MC Quiz – Skjerm</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
+  <link rel="stylesheet" href="stil.css">
+  <style>
+    body { overflow: hidden; }
+    .skjerm { display: grid; grid-template-columns: 1fr 1.3fr; gap: 3vw; padding: 3vw; height: 100vh; }
+    .venstre { display: flex; flex-direction: column; justify-content: center; text-align: center; }
+    .klokke { font-size: 16vw; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1; }
+    .tittel { font-size: 4vw; margin-bottom: 1.5vw; }
+    .stripe { padding: 1vw 0; }
+    .stripe .vinge { max-width: 40vw; }
+    .skjerm { height: calc(100vh - 16.3vw); padding-top: 1.5vw; }
+    .tavle h2 { font-family: "UnifrakturCook", "Old English Text MT", serif; }
+    .neste { margin-top: 3vw; font-size: 3vw; }
+    .nedtelling { font-size: 7vw; font-weight: bold; color: var(--gul); font-variant-numeric: tabular-nums; }
+    .tavle { background: var(--kort); border-radius: 1.2vw; padding: 2vw; overflow: hidden; }
+    .tavle h2 { margin: 0 0 1vw; font-size: 2.6vw; }
+    .tavle table { font-size: 2vw; }
+    .tavle td, .tavle th { padding: .7vw .5vw; }
+    .plass { width: 4vw; font-weight: bold; }
+    .poeng { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; }
+    .likt { font-size: 1.2vw; }
+    @media (max-width: 800px) {
+      body { overflow: auto; }
+      .skjerm { grid-template-columns: 1fr; height: auto; }
+      .klokke { font-size: 22vw; }
+      .tavle table { font-size: 16px; }
+    }
+  </style>
+</head>
+<body ondblclick="document.documentElement.requestFullscreen && document.documentElement.requestFullscreen()">
+  <div class="stripe"><img class="vinge" src="vinge-logo.png" alt="Vikenes MC"></div>
+  <div class="skjerm">
+    <div class="venstre">
+      <div class="tittel fraktur">MC Quiz</div>
+      <div class="klokke" id="klokke">--:--:--</div>
+      <div class="neste" id="neste"></div>
+    </div>
+    <div class="tavle">
+      <h2>Poengtavle</h2>
+      <table id="tavle"></table>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="felles.js"></script>
+  <script>
+    // Dobbeltklikk = fullskjerm. Hentar data kvart 5. sekund.
+    let data = null;
+    let tidsavvik = 0; // serverklokke minus PC-klokke
+
+    function na() { return new Date(Date.now() + tidsavvik); }
+
+    function to(n) { return String(n).padStart(2, "0"); }
+
+    function teikn() {
+      const t = na();
+      document.getElementById("klokke").textContent =
+        `${to(t.getHours())}:${to(t.getMinutes())}:${to(t.getSeconds())}`;
+
+      if (!data) return;
+      const neste = data.groups
+        .filter(g => g.start_at && new Date(g.start_at) > t)
+        .sort((a, b) => new Date(a.start_at) - new Date(b.start_at))[0];
+
+      const el = document.getElementById("neste");
+      if (data.groups.length === 0) {
+        el.innerHTML = `Gruppene er ikkje fordelte enno`;
+      } else if (neste) {
+        const sek = Math.max(0, Math.round((new Date(neste.start_at) - t) / 1000));
+        const tekst = sek >= 3600
+          ? `${Math.floor(sek / 3600)}:${to(Math.floor(sek / 60) % 60)}:${to(sek % 60)}`
+          : `${to(Math.floor(sek / 60))}:${to(sek % 60)}`;
+        el.innerHTML = `<div>${esc(neste.name)} startar om</div><div class="nedtelling">${tekst}</div>
+          <div class="dempa">kl. ${klokkeslett(neste.start_at)}</div>`;
+      } else if (data.groups.every(g => g.finished)) {
+        el.innerHTML = `<div class="ok">Alle gruppene er i mål! 🏁</div>`;
+      } else {
+        el.innerHTML = `<div>Alle gruppene er ute</div>`;
+      }
+    }
+
+    function tavle() {
+      const t = na();
+      const grupper = [...data.groups].sort((a, b) => b.points - a.points || a.position - b.position);
+      // Plass: like poeng = same plass
+      let plass = 0, forrige = null;
+      const telling = {};
+      grupper.forEach(g => { telling[g.points] = (telling[g.points] || 0) + 1; });
+      const rader = grupper.map((g, i) => {
+        if (g.points !== forrige) { plass = i + 1; forrige = g.points; }
+        let status;
+        if (g.finished) status = `<span class="merke gronn">I mål</span>`;
+        else if (!g.start_at || new Date(g.start_at) > t) status = `<span class="merke">Start ${klokkeslett(g.start_at)}</span>`;
+        else status = `<span class="merke gul">Post ${g.stops_handled}/${data.stops_total}</span>`;
+        const likt = telling[g.points] > 1 && g.points !== 0
+          ? ` <span class="merke raud likt">likt</span>` : "";
+        return `<tr>
+          <td class="plass">${plass}.</td>
+          <td>${esc(g.name)}${likt}</td>
+          <td>${status}</td>
+          <td class="poeng">${g.points}</td>
+        </tr>`;
+      }).join("");
+      document.getElementById("tavle").innerHTML = rader ||
+        `<tr><td class="dempa">Ingen grupper enno</td></tr>`;
+    }
+
+    async function hentData() {
+      try {
+        data = await rpc("screen_data");
+        tidsavvik = new Date(data.now) - Date.now();
+        tavle();
+        teikn();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    hentData();
+    setInterval(hentData, 5000);
+    setInterval(teikn, 250);
+  </script>
+</body>
+</html>

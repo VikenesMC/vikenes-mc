@@ -4,252 +4,585 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC Quiz Admin</title>
-
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #fff;
-    }
-
-    .wrap {
-      max-width: 900px;
-      margin: 40px auto;
-      padding: 20px;
-    }
-
-    h1 {
-      margin-bottom: 10px;
-    }
-
-    .participant {
-      background: #1b1b1b;
-      padding: 18px;
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-
-    .participant strong {
-      font-size: 18px;
-    }
-
-    .status {
-      margin-top: 8px;
-      color: #bbb;
-    }
-
-    button {
-      margin-top: 12px;
-      padding: 10px 16px;
-      border: 0;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    .paid {
-      color: #7CFC90;
-      font-weight: bold;
-    }
-  </style>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
+  <link rel="stylesheet" href="stil.css">
 </head>
-
 <body>
+  <div class="wrap brei">
+    <div class="rad" style="justify-content:space-between">
+      <div class="topp">
+        <img class="logo" src="logo.png" alt="Vikenes MC">
+        <h1>MC Quiz Admin</h1>
+      </div>
+      <div class="rad" id="toppknappar" style="display:none">
+        <a class="knapp sekundar liten" href="skjerm.html" target="_blank">Opne skjerm</a>
+        <a class="knapp sekundar liten" href="utskrift.html" target="_blank">Skriv ut QR-kodar</a>
+        <button class="sekundar liten" onclick="loggUt()">Logg ut</button>
+      </div>
+    </div>
 
-  <div class="wrap">
-    <h1>MC Quiz Admin</h1>
-    <p>Registrerte deltakarar</p>
-<div class="participant">
-  <strong>Gruppefordeling</strong>
+    <!-- Innlogging -->
+    <div class="kort" id="login" style="display:none; max-width:420px">
+      <label for="epost">E-post</label>
+      <input id="epost" type="email" autocomplete="username">
+      <label for="passord">Passord</label>
+      <input id="passord" type="password" autocomplete="current-password">
+      <button class="stor" onclick="loggInn()">Logg inn</button>
+      <p id="loginFeil" class="feil"></p>
+    </div>
 
-  <div style="margin-top:12px;">
-    <label for="firstStartTime">Første starttid</label><br>
-
-    <input
-      id="firstStartTime"
-      type="time"
-      value="10:00"
-      style="padding:10px; margin-top:6px;"
-    >
-
-    <button onclick="distributeGroups()" style="margin-left:10px;">
-      Fordel grupper
-    </button>
-  </div>
-</div>
-    <div id="participants">
-      Lastar deltakarar...
+    <div id="app" style="display:none">
+      <div class="fanar">
+        <button data-fane="deltakarar" onclick="visFane('deltakarar')">Deltakarar</button>
+        <button data-fane="postar" onclick="visFane('postar')">Postar</button>
+        <button data-fane="ruter" onclick="visFane('ruter')">Ruter</button>
+        <button data-fane="start" onclick="visFane('start')">Grupper og start</button>
+        <button data-fane="status" onclick="visFane('status')">Status</button>
+      </div>
+      <div id="fane"></div>
     </div>
   </div>
 
+  <div id="modal"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="felles.js"></script>
   <script>
-const SUPABASE_URL = "https://yrozxcxjqxfwbbdwlwwi.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_eb4NTorneozNeCZU7GnGFQ_ybS53nn5";
+    const MIN_PER_POST = 10;
+    let D = {};               // alle data
+    let aktivFane = "deltakarar";
+    let oppdateringsTimer = null;
+    let opneRuter = {};       // kva for ruter som er opna
 
-    async function loadParticipants() {
-      const response = await fetch(
-        SUPABASE_URL + "/rest/v1/participants?select=id,name,phone,paid&event_id=eq.1&order=id.asc",
-        {
-          headers: {
-            "apikey": SUPABASE_KEY
-          }
-        }
-      );
-
-      if (!response.ok) {
-        document.getElementById("participants").innerHTML =
-          "Klarte ikkje å hente deltakarane.";
-        return;
+    // ---------------- Innlogging ----------------
+    async function sjekkInnlogging() {
+      const { data } = await db.auth.getSession();
+      if (!data.session) return visLogin();
+      const erAdmin = await rpc("is_admin");
+      if (!erAdmin) {
+        await db.auth.signOut();
+        return visLogin("Denne brukaren har ikkje admin-tilgang.");
       }
+      document.getElementById("login").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      document.getElementById("toppknappar").style.display = "flex";
+      await lastAlt();
+      visFane(aktivFane);
+    }
 
-      const participants = await response.json();
+    function visLogin(feil) {
+      document.getElementById("login").style.display = "block";
+      document.getElementById("app").style.display = "none";
+      document.getElementById("toppknappar").style.display = "none";
+      document.getElementById("loginFeil").textContent = feil || "";
+    }
 
-      document.getElementById("participants").innerHTML =
-        participants.map(p => `
-          <div class="participant">
-            <strong>${p.name}</strong><br>
-            ${p.phone}
+    async function loggInn() {
+      const email = document.getElementById("epost").value.trim();
+      const password = document.getElementById("passord").value;
+      const { error } = await db.auth.signInWithPassword({ email, password });
+      if (error) return visLogin("Feil e-post eller passord.");
+      document.getElementById("passord").value = "";
+      sjekkInnlogging();
+    }
 
-            <div class="status">
-              ${p.paid
-                ? '<span class="paid">Betaling registrert ✓</span>'
-                : 'Ikkje registrert som betalt'}
-            </div>
+    async function loggUt() {
+      await db.auth.signOut();
+      visLogin();
+    }
 
-            ${!p.paid
-              ? `<button onclick="markPaid(${p.id})">Merk som betalt</button>`
-              : ''}
+    // ---------------- Data ----------------
+    async function sporring(q) {
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      return data;
+    }
+
+    async function lastAlt() {
+      const eventId = await rpc("current_event_id");
+      const [ev, deltakarar, grupper, postar, sporsmal, ruter, ruteStopp, svar, besok] = await Promise.all([
+        sporring(db.from("events").select("*").eq("id", eventId).single()),
+        sporring(db.from("participants").select("*").eq("event_id", eventId).order("id")),
+        sporring(db.from("groups").select("*").eq("event_id", eventId).order("position")),
+        sporring(db.from("stops").select("*").eq("event_id", eventId).order("id")),
+        sporring(db.from("questions").select("*").order("position")),
+        sporring(db.from("routes").select("*").eq("event_id", eventId).order("id")),
+        sporring(db.from("route_stops").select("*").order("position")),
+        sporring(db.from("group_answers").select("*")),
+        sporring(db.from("group_stops").select("*")),
+      ]);
+      D = { eventId, ev, deltakarar, grupper, postar, sporsmal, ruter, ruteStopp, svar, besok };
+    }
+
+    async function oppdater() {
+      try {
+        await lastAlt();
+        visFane(aktivFane, true);
+      } catch (e) {
+        alert("Feil: " + e.message);
+      }
+    }
+
+    async function lagreDb(q) {
+      const { error } = await q;
+      if (error) { alert("Klarte ikkje å lagre: " + error.message); return false; }
+      return true;
+    }
+
+    // ---------------- Faner ----------------
+    function visFane(namn, behaldScroll) {
+      aktivFane = namn;
+      document.querySelectorAll(".fanar button").forEach(b => b.classList.toggle("aktiv", b.dataset.fane === namn));
+      clearInterval(oppdateringsTimer);
+      const y = window.scrollY;
+      const html = {
+        deltakarar: faneDeltakarar,
+        postar: fanePostar,
+        ruter: faneRuter,
+        start: faneStart,
+        status: faneStatus,
+      }[namn]();
+      document.getElementById("fane").innerHTML = html;
+      if (behaldScroll) window.scrollTo(0, y);
+      if (namn === "status") {
+        oppdateringsTimer = setInterval(async () => {
+          await lastAlt();
+          document.getElementById("fane").innerHTML = faneStatus();
+        }, 15000);
+      }
+    }
+
+    // ---------------- Deltakarar ----------------
+    function faneDeltakarar() {
+      const betalte = D.deltakarar.filter(p => p.paid).length;
+      const gruppeValg = (p) => `
+        <select onchange="flyttDeltakar(${p.id}, this.value)" style="width:auto; padding:6px">
+          <option value="">– ingen –</option>
+          ${D.grupper.map(g => `<option value="${g.id}" ${p.group_id === g.id ? "selected" : ""}>${esc(g.name)}</option>`).join("")}
+        </select>`;
+
+      return `
+        <div class="kort">
+          <b>${D.deltakarar.length}</b> påmelde · <b class="ok">${betalte}</b> betalt
+          <button class="sekundar liten" style="margin-left:10px" onclick="oppdater()">Oppdater</button>
+        </div>
+
+        <div class="kort">
+          <b>Meld på manuelt</b> <span class="dempa">(for dei som ikkje brukar mobil)</span>
+          <div class="rad" style="margin-top:8px">
+            <input id="nyNamn" placeholder="Namn" style="flex:2; min-width:160px">
+            <input id="nyTlf" placeholder="Telefon" style="flex:1; min-width:120px">
+            <button onclick="leggTilDeltakar()">Legg til</button>
           </div>
-        `).join("");
+        </div>
+
+        <div class="kort">
+          <table>
+            <tr><th>Namn</th><th>Telefon</th><th>Betalt</th>${D.grupper.length ? "<th>Gruppe</th>" : ""}<th></th></tr>
+            ${D.deltakarar.map(p => `
+              <tr>
+                <td>${esc(p.name)}</td>
+                <td>${esc(p.phone)}</td>
+                <td>${p.paid
+                  ? `<span class="ok">✓</span> <button class="sekundar liten" onclick="settBetalt(${p.id}, false)">Angre</button>`
+                  : `<button class="liten" onclick="settBetalt(${p.id}, true)">Merk betalt</button>`}</td>
+                ${D.grupper.length ? `<td>${gruppeValg(p)}</td>` : ""}
+                <td><button class="fare liten" onclick="slettDeltakar(${p.id})">Slett</button></td>
+              </tr>`).join("")}
+          </table>
+        </div>`;
     }
 
-async function markPaid(id) {
-  const response = await fetch(
-    SUPABASE_URL + "/rest/v1/participants?id=eq." + id,
-    {
-      method: "PATCH",
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-      },
-      body: JSON.stringify({
-        paid: true
-      })
+    async function leggTilDeltakar() {
+      const namn = document.getElementById("nyNamn").value.trim();
+      const tlf = document.getElementById("nyTlf").value.trim();
+      if (!namn) return;
+      if (await lagreDb(db.from("participants").insert({ name: namn, phone: tlf, event_id: D.eventId, paid: false }))) oppdater();
     }
-  );
 
-  if (response.ok) {
-    loadParticipants();
-  } else {
-    alert("Klarte ikkje å registrere betaling.");
-  }
-}
+    async function settBetalt(id, verdi) {
+      if (await lagreDb(db.from("participants").update({ paid: verdi }).eq("id", id))) oppdater();
+    }
 
-    loadParticipants();
-async function distributeGroups() {
-  const response = await fetch(
-    SUPABASE_URL + "/rest/v1/participants?select=id&event_id=eq.1&paid=eq.true&order=id.asc",
-    {
-      headers: {
-        "apikey": SUPABASE_KEY
+    async function flyttDeltakar(id, gruppeId) {
+      if (await lagreDb(db.from("participants").update({ group_id: gruppeId ? Number(gruppeId) : null }).eq("id", id))) oppdater();
+    }
+
+    async function slettDeltakar(id) {
+      const p = D.deltakarar.find(x => x.id === id);
+      if (!confirm("Slette " + (p ? p.name : "deltakaren") + "?")) return;
+      if (await lagreDb(db.from("participants").delete().eq("id", id))) oppdater();
+    }
+
+    // ---------------- Postar og spørsmål ----------------
+    function sporsmalFor(postId) {
+      return D.sporsmal.filter(q => q.stop_id === postId).sort((a, b) => a.position - b.position || a.id - b.id);
+    }
+
+    function postKomplett(postId) {
+      const qs = sporsmalFor(postId);
+      return qs.length === 3 && qs.every(q => q.question && q.option_1 && q.option_2 && q.option_3 && q.correct_option);
+    }
+
+    function fanePostar() {
+      return `
+        <div class="kort">
+          <b>Ny post</b>
+          <div class="rad" style="margin-top:8px">
+            <input id="nyPostNamn" placeholder="Namn, t.d. Steindølbrua" style="flex:1; min-width:180px">
+            <input id="nyPostAdr" placeholder="Adresse for kart, t.d. Steindølbrua, 6156 Ørsta" style="flex:2; min-width:220px">
+            <button onclick="nyPost()">Legg til</button>
+          </div>
+        </div>
+        ${D.postar.length === 0 ? `<p class="dempa">Ingen postar enno.</p>` : ""}
+        ${D.postar.map(postSkjema).join("")}`;
+    }
+
+    function postSkjema(p) {
+      const qs = sporsmalFor(p.id);
+      const rader = [0, 1, 2].map(i => {
+        const q = qs[i] || {};
+        const n = `${p.id}_${i}`;
+        return `
+          <div style="margin-top:16px; padding-top:12px; border-top:1px solid #333">
+            <b>Spørsmål ${i + 1}</b>
+            <input id="q_${n}" value="${esc(q.question)}" placeholder="Spørsmål">
+            ${[1, 2, 3].map(k => `
+              <div class="rad" style="margin-top:6px">
+                <input type="radio" name="rett_${n}" value="${k}" ${q.correct_option === k ? "checked" : ""} style="width:auto" title="Rett svar">
+                <input id="o${k}_${n}" value="${esc(q["option_" + k])}" placeholder="Alternativ ${"ABC"[k - 1]}" style="flex:1">
+              </div>`).join("")}
+            <input type="hidden" id="qid_${n}" value="${q.id || ""}">
+          </div>`;
+      }).join("");
+
+      return `
+        <div class="kort">
+          <div class="rad" style="justify-content:space-between">
+            <span class="stor-tekst" style="font-size:20px">${esc(p.name)}</span>
+            ${postKomplett(p.id) ? `<span class="merke gronn">Klar</span>` : `<span class="merke gul">Manglar spørsmål/rett svar</span>`}
+          </div>
+          <label>Namn</label><input id="pn_${p.id}" value="${esc(p.name)}">
+          <label>Adresse (for kart)</label><input id="pa_${p.id}" value="${esc(p.address)}">
+          <p class="dempa" style="margin-bottom:0">Kryss av rundingen ved rett svar.</p>
+          ${rader}
+          <div class="rad" style="margin-top:16px">
+            <button onclick="lagrePost(${p.id})">Lagre posten</button>
+            <button class="fare" onclick="slettPost(${p.id})">Slett posten</button>
+          </div>
+        </div>`;
+    }
+
+    async function nyPost() {
+      const namn = document.getElementById("nyPostNamn").value.trim();
+      const adr = document.getElementById("nyPostAdr").value.trim();
+      if (!namn) return;
+      if (await lagreDb(db.from("stops").insert({ name: namn, address: adr, event_id: D.eventId }))) oppdater();
+    }
+
+    async function lagrePost(id) {
+      const ok = await lagreDb(db.from("stops").update({
+        name: document.getElementById("pn_" + id).value.trim(),
+        address: document.getElementById("pa_" + id).value.trim(),
+      }).eq("id", id));
+      if (!ok) return;
+
+      for (let i = 0; i < 3; i++) {
+        const n = `${id}_${i}`;
+        const rett = document.querySelector(`input[name="rett_${n}"]:checked`);
+        const rad = {
+          stop_id: id,
+          position: i + 1,
+          question: document.getElementById("q_" + n).value.trim(),
+          option_1: document.getElementById("o1_" + n).value.trim(),
+          option_2: document.getElementById("o2_" + n).value.trim(),
+          option_3: document.getElementById("o3_" + n).value.trim(),
+          correct_option: rett ? Number(rett.value) : null,
+        };
+        const qid = document.getElementById("qid_" + n).value;
+        const tom = !rad.question && !rad.option_1 && !rad.option_2 && !rad.option_3;
+        if (qid) {
+          if (!(await lagreDb(db.from("questions").update(rad).eq("id", Number(qid))))) return;
+        } else if (!tom) {
+          if (!(await lagreDb(db.from("questions").insert(rad)))) return;
+        }
+      }
+      await oppdater();
+    }
+
+    async function slettPost(id) {
+      if (!confirm("Slette posten og spørsmåla? Han blir òg fjerna frå rutene.")) return;
+      if (await lagreDb(db.from("stops").delete().eq("id", id))) oppdater();
+    }
+
+    // ---------------- Ruter ----------------
+    function ruteStoppFor(ruteId) {
+      return D.ruteStopp.filter(r => r.route_id === ruteId).sort((a, b) => a.position - b.position);
+    }
+
+    function minuttTekst(min) {
+      const t = Math.floor(min / 60), m = min % 60;
+      return t ? `${t} t ${m} min` : `${m} min`;
+    }
+
+    function faneRuter() {
+      return `
+        <div class="kort">
+          <b>Ny rute</b>
+          <div class="rad" style="margin-top:8px">
+            <input id="nyRute" placeholder="Namn, t.d. Fint vêr" style="flex:1">
+            <button onclick="nyRute()">Legg til</button>
+          </div>
+        </div>
+        ${D.ruter.length === 0 ? `<p class="dempa">Ingen ruter enno. Legg inn postar først.</p>` : ""}
+        ${D.ruter.map(ruteKort).join("")}`;
+    }
+
+    function ruteKort(r) {
+      const rs = ruteStoppFor(r.id);
+      const aktiv = D.ev.active_route_id === r.id;
+      const total = (r.drive_minutes || 0) + rs.length * MIN_PER_POST;
+      const ledige = D.postar.filter(p => !rs.some(x => x.stop_id === p.id));
+      return `
+        <div class="kort" style="${aktiv ? "outline:3px solid var(--gronn)" : ""}">
+          <div class="rad" style="justify-content:space-between">
+            <span class="stor-tekst" style="font-size:20px">${esc(r.name)}</span>
+            ${aktiv ? `<span class="merke gronn">Dagens rute</span>` : `<button class="liten" onclick="settAktivRute(${r.id})">Bruk denne i dag</button>`}
+          </div>
+          <ol>
+            ${rs.map((x, i) => {
+              const p = D.postar.find(p => p.id === x.stop_id);
+              return `<li style="margin:6px 0">${esc(p ? p.name : "?")}
+                ${p && !postKomplett(p.id) ? `<span class="merke gul">manglar spørsmål</span>` : ""}
+                <button class="sekundar liten" onclick="flyttPost(${r.id}, ${i}, -1)" ${i === 0 ? "disabled" : ""}>↑</button>
+                <button class="sekundar liten" onclick="flyttPost(${r.id}, ${i}, 1)" ${i === rs.length - 1 ? "disabled" : ""}>↓</button>
+                <button class="fare liten" onclick="fjernPost(${x.id})">✕</button></li>`;
+            }).join("")}
+            <li class="dempa">Mål: ${esc(D.ev.finish_name)}</li>
+          </ol>
+          ${ledige.length ? `
+            <div class="rad">
+              <select id="leggTil_${r.id}" style="flex:1">${ledige.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select>
+              <button onclick="leggPostIRute(${r.id})">Legg til post</button>
+            </div>` : ""}
+          <div class="rad" style="margin-top:12px">
+            <label style="margin:0">Køyretid totalt (min)</label>
+            <input type="number" min="0" value="${r.drive_minutes || 0}" style="width:100px" onchange="settKoyretid(${r.id}, this.value)">
+          </div>
+          <p>Berekna tid per gruppe: <b>${minuttTekst(total)}</b>
+            <span class="dempa">(køyring + ${MIN_PER_POST} min × ${rs.length} postar)</span></p>
+          <button class="fare liten" onclick="slettRute(${r.id})">Slett ruta</button>
+        </div>`;
+    }
+
+    async function nyRute() {
+      const namn = document.getElementById("nyRute").value.trim();
+      if (!namn) return;
+      if (await lagreDb(db.from("routes").insert({ name: namn, event_id: D.eventId }))) oppdater();
+    }
+
+    async function settAktivRute(id) {
+      if (await lagreDb(db.from("events").update({ active_route_id: id }).eq("id", D.eventId))) oppdater();
+    }
+
+    async function settKoyretid(id, v) {
+      if (await lagreDb(db.from("routes").update({ drive_minutes: Math.max(0, Number(v) || 0) }).eq("id", id))) oppdater();
+    }
+
+    async function leggPostIRute(ruteId) {
+      const stopId = Number(document.getElementById("leggTil_" + ruteId).value);
+      const rs = ruteStoppFor(ruteId);
+      const pos = rs.length ? rs[rs.length - 1].position + 1 : 1;
+      if (await lagreDb(db.from("route_stops").insert({ route_id: ruteId, stop_id: stopId, position: pos }))) oppdater();
+    }
+
+    async function flyttPost(ruteId, i, retning) {
+      const rs = ruteStoppFor(ruteId);
+      const a = rs[i], b = rs[i + retning];
+      if (!a || !b) return;
+      await lagreDb(db.from("route_stops").update({ position: b.position }).eq("id", a.id));
+      await lagreDb(db.from("route_stops").update({ position: a.position }).eq("id", b.id));
+      oppdater();
+    }
+
+    async function fjernPost(id) {
+      if (await lagreDb(db.from("route_stops").delete().eq("id", id))) oppdater();
+    }
+
+    async function slettRute(id) {
+      if (!confirm("Slette ruta?")) return;
+      if (await lagreDb(db.from("routes").delete().eq("id", id))) oppdater();
+    }
+
+    // ---------------- Grupper og start ----------------
+    function standardStart() {
+      const d = D.ev.first_start ? new Date(D.ev.first_start) : (() => { const x = new Date(); x.setHours(10, 0, 0, 0); return x; })();
+      const p = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+
+    function faneStart() {
+      const betalte = D.deltakarar.filter(p => p.paid).length;
+      const iGang = D.grupper.some(g => g.leader_token || g.finished_at) || D.svar.some(s => D.grupper.some(g => g.id === s.group_id));
+      const aktivRute = D.ruter.find(r => r.id === D.ev.active_route_id);
+      const utanGruppe = D.deltakarar.filter(p => p.paid && !p.group_id);
+
+      return `
+        <div class="kort">
+          <p>Dagens rute: ${aktivRute ? `<b>${esc(aktivRute.name)}</b>` : `<span class="feil">ikkje vald (sjå Ruter)</span>`}</p>
+          <p>Betalte deltakarar: <b>${betalte}</b></p>
+          <label for="forsteStart">Første start</label>
+          <input id="forsteStart" type="datetime-local" value="${standardStart()}" style="max-width:280px">
+          <button onclick="fordelGrupper()" ${iGang ? "disabled" : ""}>${D.grupper.length ? "Fordel grupper på nytt" : "Fordel grupper"}</button>
+          <p class="dempa">Ca. 5 per gruppe, minst 2 og maks 13 grupper, tilfeldig blanda. ${MIN_PER_POST} min mellom kvar start.
+            ${iGang ? "<br><b>Gruppene er i gang og kan ikkje fordelast på nytt.</b>" : ""}</p>
+        </div>
+
+        ${utanGruppe.length && D.grupper.length ? `<div class="kort vars">Betalt men utan gruppe: ${utanGruppe.map(p => esc(p.name)).join(", ")} – set gruppe under Deltakarar.</div>` : ""}
+
+        ${D.grupper.map(g => {
+          const medlem = D.deltakarar.filter(p => p.group_id === g.id);
+          const leiar = D.deltakarar.find(p => p.id === g.leader_participant_id);
+          let leiarStatus;
+          if (g.leader_token) leiarStatus = `<span class="merke gronn">Leiar kopla: ${esc(leiar ? leiar.name : "?")}</span>`;
+          else if (g.bind_token) leiarStatus = `<span class="merke gul">Ventar på at ${esc(leiar ? leiar.name : "leiaren")} skannar</span>`;
+          else leiarStatus = `<span class="merke">Ingen leiar enno</span>`;
+          return `
+            <div class="kort">
+              <div class="rad" style="justify-content:space-between">
+                <span class="stor-tekst" style="font-size:20px">${esc(g.name)} · start ${klokkeslett(g.start_at)}</span>
+                ${leiarStatus}
+              </div>
+              <p>${medlem.map(p => esc(p.name)).join(", ") || "<span class='dempa'>Ingen medlemmer</span>"}</p>
+              <div class="rad">
+                <select id="leiar_${g.id}" style="flex:1; min-width:180px">
+                  ${medlem.map(p => `<option value="${p.id}" ${p.id === g.leader_participant_id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+                </select>
+                <button onclick="velLeiar(${g.id})" ${medlem.length ? "" : "disabled"}>${g.leader_token ? "Byt leiar / ny mobil" : "Vel leiar og vis QR"}</button>
+                ${g.bind_token ? `<button class="sekundar" onclick="visKoplingsQR(${g.id})">Vis QR igjen</button>` : ""}
+              </div>
+            </div>`;
+        }).join("")}`;
+    }
+
+    async function fordelGrupper() {
+      const verdi = document.getElementById("forsteStart").value;
+      if (!verdi) return alert("Vel tidspunkt for første start.");
+      if (D.grupper.length && !confirm("Gruppene blir laga på nytt og blanda om. Halde fram?")) return;
+      try {
+        const r = await rpc("distribute_groups", { p_first_start: new Date(verdi).toISOString() });
+        await oppdater();
+        alert(`${r.participants} deltakarar fordelte i ${r.groups} grupper.`);
+      } catch (e) {
+        alert(e.message);
       }
     }
-  );
 
-  if (!response.ok) {
-    alert("Klarte ikkje å hente betalte deltakarar.");
-    return;
-  }
-
-  const participants = await response.json();
-  const count = participants.length;
-
-  if (count === 0) {
-    alert("Ingen betalte deltakarar enno.");
-    return;
-  }
-
-  let numberOfGroups;
-
-  if (count <= 70) {
-    numberOfGroups = Math.min(7, Math.max(1, Math.floor(count / 4)));
-  } else {
-    numberOfGroups = Math.ceil(count / 10);
-  }
-
-  const existingResponse = await fetch(
-    SUPABASE_URL + "/rest/v1/groups?select=id&event_id=eq.1&limit=1",
-    {
-      headers: {
-        "apikey": SUPABASE_KEY
-      }
+    function nyKode() {
+      const a = new Uint8Array(16);
+      crypto.getRandomValues(a);
+      return Array.from(a, b => b.toString(16).padStart(2, "0")).join("");
     }
-  );
 
-  const existingGroups = await existingResponse.json();
+    async function velLeiar(gruppeId) {
+      const pid = Number(document.getElementById("leiar_" + gruppeId).value);
+      const g = D.grupper.find(x => x.id === gruppeId);
+      if (g.leader_token && !confirm("Den gamle leiarmobilen sluttar å virke. Halde fram?")) return;
+      const ok = await lagreDb(db.from("groups").update({
+        leader_participant_id: pid,
+        bind_token: nyKode(),
+        leader_token: null,
+      }).eq("id", gruppeId));
+      if (!ok) return;
+      await lastAlt();
+      visFane("start", true);
+      visKoplingsQR(gruppeId);
+    }
 
-  if (existingGroups.length > 0) {
-    alert("Det er allereie oppretta grupper for dette arrangementet.");
-    return;
-  }
+    let modalTimer = null;
+    function visKoplingsQR(gruppeId) {
+      const g = D.grupper.find(x => x.id === gruppeId);
+      const leiar = D.deltakarar.find(p => p.id === g.leader_participant_id);
+      const url = BASE_URL + "leiar.html?kopla=" + g.bind_token;
+      document.getElementById("modal").innerHTML = `
+        <div class="modal-bak" onclick="if(event.target===this) lukkModal()">
+          <div class="modal">
+            <p class="stor-tekst">${esc(g.name)}</p>
+            <p>Leiar: <b>${esc(leiar ? leiar.name : "")}</b></p>
+            <p>Skann med kameraet på mobilen:</p>
+            <div class="qr-boks" id="koplingsQR"></div>
+            <p id="koplingStatus" class="dempa">Ventar på skanning …</p>
+            <button class="stor sekundar" onclick="lukkModal()">Lukk</button>
+          </div>
+        </div>`;
+      new QRCode(document.getElementById("koplingsQR"), { text: url, width: 280, height: 280, correctLevel: QRCode.CorrectLevel.M });
 
-  const firstStartTime =
-    document.getElementById("firstStartTime").value;
+      clearInterval(modalTimer);
+      modalTimer = setInterval(async () => {
+        const { data } = await db.from("groups").select("leader_token,bind_token").eq("id", gruppeId).single();
+        if (data && data.leader_token && !data.bind_token) {
+          clearInterval(modalTimer);
+          document.getElementById("koplingStatus").innerHTML = `<span class="ok stor-tekst">Kopla! ✓</span>`;
+          setTimeout(() => { lukkModal(); }, 1500);
+        }
+      }, 2000);
+    }
 
-  const [startHour, startMinute] =
-    firstStartTime.split(":").map(Number);
+    async function lukkModal() {
+      clearInterval(modalTimer);
+      document.getElementById("modal").innerHTML = "";
+      await oppdater();
+    }
 
-  const groups = [];
+    // ---------------- Status (live) ----------------
+    function faneStatus() {
+      const rs = ruteStoppFor(D.ev.active_route_id);
+      const na = new Date();
+      const rader = D.grupper.map(g => {
+        const besok = D.besok.filter(b => b.group_id === g.id);
+        const svar = D.svar.filter(s => s.group_id === g.id);
+        const poeng = svar.reduce((s, x) => s + x.points, 0);
+        const hoppa = besok.filter(b => b.status === "skipped").map(b => (D.postar.find(p => p.id === b.stop_id) || {}).name);
+        const tider = [...besok.map(b => b.at), ...svar.map(s => s.created_at)].sort();
+        const sist = tider[tider.length - 1];
+        const sistPost = besok.filter(b => b.status === "done").sort((a, b) => a.at < b.at ? 1 : -1)[0];
+        const neste = rs.find(x => !besok.some(b => b.stop_id === x.stop_id));
+        const nestePost = neste ? (D.postar.find(p => p.id === neste.stop_id) || {}).name : "Mål";
+        let st;
+        if (g.finished_at) st = `<span class="merke gronn">I mål ${klokkeslett(g.finished_at)}</span>`;
+        else if (!g.start_at || new Date(g.start_at) > na) st = `<span class="merke">Ventar på start</span>`;
+        else st = `<span class="merke gul">Ute</span>`;
+        return { g, poeng, hoppa, sist, sistPost, nestePost, st, ferdig: !!g.finished_at, handsama: besok.length };
+      }).sort((a, b) => (a.ferdig - b.ferdig) || (a.g.position - b.g.position));
 
-  for (let i = 0; i < numberOfGroups; i++) {
-    const totalMinutes =
-      startHour * 60 + startMinute + i * 10;
+      const ute = rader.filter(r => !r.ferdig).length;
+      return `
+        <div class="kort">
+          <b>${ute}</b> grupper ikkje i mål · <b>${rader.length - ute}</b> i mål
+          <span class="dempa">· oppdaterer kvart 15. sekund</span>
+          <button class="sekundar liten" style="margin-left:10px" onclick="oppdater()">Oppdater no</button>
+        </div>
+        <div class="kort" style="overflow-x:auto">
+          <table>
+            <tr><th>Gruppe</th><th>Status</th><th>Postar</th><th>Neste</th><th>Sist aktiv</th><th>Poeng</th></tr>
+            ${rader.map(r => `
+              <tr>
+                <td><b>${esc(r.g.name)}</b><br><span class="dempa">start ${klokkeslett(r.g.start_at)}</span></td>
+                <td>${r.st}${r.hoppa.length ? `<br><span class="vars">Hoppa over: ${r.hoppa.map(esc).join(", ")}</span>` : ""}</td>
+                <td>${r.handsama} / ${rs.length}</td>
+                <td>${r.ferdig ? "–" : esc(r.nestePost)}</td>
+                <td>${r.sist ? klokkeslett(r.sist) : "–"}${r.sistPost ? `<br><span class="dempa">${esc((D.postar.find(p => p.id === r.sistPost.stop_id) || {}).name)}</span>` : ""}</td>
+                <td><b>${r.poeng}</b></td>
+              </tr>`).join("")}
+          </table>
+        </div>`;
+    }
 
-    const hour =
-      Math.floor(totalMinutes / 60) % 24;
-
-    const minute =
-      totalMinutes % 60;
-
-    const startTime =
-      String(hour).padStart(2, "0") +
-      ":" +
-      String(minute).padStart(2, "0");
-
-    groups.push({
-      name: "Gruppe " + (i + 1),
-      start_time: startTime,
-      event_id: 1
+    sjekkInnlogging().catch(e => {
+      console.error(e);
+      visLogin("Fekk ikkje kontakt med databasen.");
     });
-  }
-
-  const groupResponse = await fetch(
-    SUPABASE_URL + "/rest/v1/groups",
-    {
-      method: "POST",
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Content-Type": "application/json",
-        "Prefer": "return=representation"
-      },
-      body: JSON.stringify(groups)
-    }
-  );
-
-  if (!groupResponse.ok) {
-    const errorText = await groupResponse.text();
-    alert("Klarte ikkje å opprette gruppene: " + errorText);
-    return;
-  }
-
-  alert(
-    numberOfGroups +
-    " grupper er oppretta med 10 minutt mellom startane."
-  );
-}
-
-</script>    
+  </script>
 </body>
 </html>

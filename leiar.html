@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MC Quiz – Leiar</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
+  <link rel="stylesheet" href="stil.css">
+</head>
+<body>
+  <div class="wrap">
+    <div class="stripe"><img class="vinge" src="vinge-logo.png" alt="Vikenes MC"></div>
+    <h1>MC Quiz</h1>
+    <div id="innhald"><div class="kort">Lastar …</div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="felles.js"></script>
+  <script>
+    // Leiar-sida. Tre måtar å kome hit:
+    //   leiar.html?kopla=KODE  – leiaren skannar QR hos admin ved start
+    //   leiar.html?post=KODE   – leiaren skannar QR på ein post (eller mål)
+    //   leiar.html             – vis status og neste destinasjon
+    const TOKEN_NOKKEL = "mcquiz_leiar_token";
+    const params = new URLSearchParams(location.search);
+    const innhald = document.getElementById("innhald");
+
+    let token = hent(TOKEN_NOKKEL);
+    let postKode = params.get("post");
+    let sporsmal = [];   // spørsmål att på denne posten
+    let valt = null;     // valt alternativ (1–3)
+
+    function vis(html) {
+      innhald.innerHTML = html;
+      window.scrollTo(0, 0);
+    }
+
+    function destinasjonHtml(neste, tittel) {
+      if (!neste) return "";
+      const erMaal = neste.kind === "finish";
+      return `
+        <div class="kort">
+          <p class="dempa">${esc(tittel || (erMaal ? "Køyr tilbake til" : "Neste post"))}</p>
+          <p class="stor-tekst">${esc(neste.name)}</p>
+          ${neste.address ? `<p>${esc(neste.address)}</p>
+            <a class="knapp stor" href="${kartLenke(neste.address)}" target="_blank" rel="noopener">Opne i kart</a>` : ""}
+          ${erMaal ? `<p class="dempa">Skann mål-koden på klubben når de er tilbake.</p>` : `<p class="dempa">Skann QR-koden når de er framme.</p>`}
+        </div>`;
+    }
+
+    function ikkjeLeiar() {
+      vis(`
+        <div class="kort">
+          <p class="stor-tekst">Det er leiaren som svarar</p>
+          <p>Berre mobilen til leiaren i gruppa kan svare på spørsmåla.</p>
+          <p class="dempa">Er du leiar og har bytt mobil, eller fungerer ikkje mobilen? Ring arrangøren, så kan dei kople ein ny mobil.</p>
+        </div>`);
+    }
+
+    async function kopla(bindKode) {
+      const svar = await rpc("claim_leader", { p_bind: bindKode });
+      if (svar.status !== "ok") {
+        vis(`<div class="kort"><p class="stor-tekst feil">Koden fungerte ikkje</p>
+             <p>Koden er brukt eller utgått. Be arrangøren vise ein ny kode.</p></div>`);
+        return;
+      }
+      token = svar.token;
+      if (!lagre(TOKEN_NOKKEL, token)) {
+        vis(`<div class="kort"><p class="feil">Mobilen lèt ikkje sida lagre data (privat modus?). Opne koden i vanleg nettlesar og prøv igjen.</p></div>`);
+        return;
+      }
+      history.replaceState(null, "", "leiar.html");
+      await visStatus(`Du er leiar for ${svar.group_name}! ✓`);
+    }
+
+    async function visStatus(overskrift) {
+      if (!token) {
+        vis(`<div class="kort"><p>Denne mobilen er ikkje kopla til ei gruppe.</p>
+             <p class="dempa">Leiaren blir kopla ved start hos arrangøren.</p></div>`);
+        return;
+      }
+      const s = await rpc("group_status", { p_token: token });
+      if (s.status !== "ok") return ikkjeLeiar();
+
+      if (s.finished) {
+        vis(`<div class="kort">
+               <p class="stor-tekst ok">${esc(s.group_name)} er i mål! 🏁</p>
+               <p>Kaffi, vaflar og brus ventar. Resultatet kjem på premieutdelinga.</p>
+             </div>`);
+        return;
+      }
+
+      vis(`
+        <div class="kort">
+          ${overskrift ? `<p class="stor-tekst ok">${esc(overskrift)}</p>` : `<p class="stor-tekst">${esc(s.group_name)}</p>`}
+          <p>Start: <b>${klokkeslett(s.start_at)}</b> · Postar: ${s.stops_handled} av ${s.stops_total}</p>
+        </div>
+        ${destinasjonHtml(s.next)}
+        <div class="kort dempa">
+          Køyr trygt. Det er berre poeng som tel – ikkje tid.
+        </div>`);
+    }
+
+    async function opnePost(bekreftHopp) {
+      const svar = await rpc("open_stop", { p_token: token, p_code: postKode, p_confirm_skip: !!bekreftHopp });
+
+      switch (svar.status) {
+        case "not_leader":
+          return ikkjeLeiar();
+
+        case "unknown_code":
+          return vis(`<div class="kort"><p class="feil">Ukjend QR-kode.</p></div>`);
+
+        case "already_finished":
+        case "finished":
+          history.replaceState(null, "", "leiar.html");
+          return vis(`<div class="kort">
+              <p class="stor-tekst ok">Velkomen tilbake${svar.group_name ? ", " + esc(svar.group_name) : ""}! 🏁</p>
+              <p>De er registrerte i mål. Kaffi, vaflar og brus ventar inne.</p>
+              <p class="dempa">Resultatet kjem på premieutdelinga.</p>
+            </div>`);
+
+        case "finish_early":
+          return vis(`<div class="kort">
+              <p class="stor-tekst vars">Er de ferdige?</p>
+              <p>De har ikkje vore på: <b>${svar.skipped.map(esc).join(", ")}</b></p>
+              <p>Går de i mål no, gir desse postane 0 poeng.</p>
+              <button class="stor" onclick="opnePost(true)">Ja, vi er i mål</button>
+              <button class="stor sekundar" onclick="visStatus()">Nei, vi køyrer vidare</button>
+            </div>`);
+
+        case "not_in_route":
+          return vis(`<div class="kort"><p class="vars stor-tekst">${esc(svar.stop_name)} er ikkje med i dagens rute.</p></div>
+            ${destinasjonHtml(svar.next)}`);
+
+        case "stop_closed":
+          return vis(`<div class="kort"><p class="stor-tekst">${esc(svar.stop_name)} er alt ferdig eller stengd.</p></div>
+            ${destinasjonHtml(svar.next)}`);
+
+        case "skip_warning":
+          return vis(`<div class="kort">
+              <p class="stor-tekst vars">De har hoppa over ein post</p>
+              <p>De har ikkje vore på: <b>${svar.skipped.map(esc).join(", ")}</b></p>
+              <p>Held de fram her på <b>${esc(svar.stop_name)}</b>, gir dei postane 0 poeng.</p>
+              <button class="stor" onclick="opnePost(true)">Hald fram her</button>
+              <button class="stor sekundar" onclick="visStatus()">Avbryt</button>
+            </div>`);
+
+        case "questions":
+          history.replaceState(null, "", "leiar.html?post=" + encodeURIComponent(postKode));
+          sporsmal = svar.questions;
+          if (sporsmal.length === 0) return visStatus();
+          return visSporsmal(svar.stop_name);
+
+        default:
+          return vis(`<div class="kort"><p class="feil">Noko gjekk gale. Prøv å skanne igjen.</p></div>`);
+      }
+    }
+
+    let postNamn = "";
+    function visSporsmal(namn) {
+      if (namn) postNamn = namn;
+      valt = null;
+      const q = sporsmal[0];
+      const nr = 4 - sporsmal.length; // 3 spørsmål per post
+      vis(`
+        <div class="kort">
+          <p class="dempa">${esc(postNamn)} · spørsmål ${Math.max(1, nr)} av 3</p>
+          <p class="stor-tekst">${esc(q.question)}</p>
+          ${q.options.map((alt, i) => `
+            <button class="alternativ" id="alt${i + 1}" onclick="vel(${i + 1})">${"ABC"[i]}. ${esc(alt)}</button>
+          `).join("")}
+          <button class="stor" id="send" onclick="sendSvar()" disabled>Send svar</button>
+          <p class="dempa">Snakk saman i gruppa før de sender. Svaret kan ikkje endrast.</p>
+        </div>`);
+    }
+
+    function vel(n) {
+      valt = n;
+      for (let i = 1; i <= 3; i++) {
+        document.getElementById("alt" + i).classList.toggle("valt", i === n);
+      }
+      document.getElementById("send").disabled = false;
+    }
+
+    async function sendSvar() {
+      if (!valt) return;
+      const knapp = document.getElementById("send");
+      knapp.disabled = true;
+      const q = sporsmal[0];
+      try {
+        const svar = await rpc("answer_question", { p_token: token, p_question_id: q.id, p_choice: valt });
+        if (svar.status === "not_leader") return ikkjeLeiar();
+        if (svar.status === "stop_done") {
+          history.replaceState(null, "", "leiar.html");
+          return vis(`
+            <div class="kort"><p class="stor-tekst ok">${esc(postNamn)} er ferdig! ✓</p>
+              <p>Svara er registrerte. Resultatet kjem på premieutdelinga.</p></div>
+            ${destinasjonHtml(svar.next)}`);
+        }
+        if (svar.status === "ok") {
+          sporsmal.shift();
+          return visSporsmal();
+        }
+        // Spørsmålet er ikkje lenger ope – hent posten på nytt
+        await opnePost(false);
+      } catch (e) {
+        console.error(e);
+        knapp.disabled = false;
+        alert("Fekk ikkje sendt svaret. Sjekk dekninga og prøv igjen.");
+      }
+    }
+
+    async function start() {
+      try {
+        const bind = params.get("kopla");
+        if (bind) return await kopla(bind);
+        if (postKode) {
+          if (!token) return ikkjeLeiar();
+          return await opnePost(false);
+        }
+        await visStatus();
+      } catch (e) {
+        console.error(e);
+        vis(`<div class="kort"><p class="feil">Fekk ikkje kontakt. Sjekk dekninga og last sida på nytt.</p>
+             <button class="stor" onclick="location.reload()">Prøv igjen</button></div>`);
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+/* Klubbprofil frå lokalet: svart med oransje stripe og vinge-logo.
+   Oransje er henta frå klubben si logofil (Vegg bilde.png). Byt her om de har eksakt målingskode. */
+:root {
+  --oransje: #FC8D00;
+  --bg: #0a0a0a;
+  --kort: #1a1a1a;
+  --kort2: #242424;
+  --tekst: #fff;
+  --dempa: #bbb;
+  --linje: #333;
+  --gronn: #7CFC90;
+  --raud: #ff6b6b;
+  --gul: #ffd166;
+  --knapp: var(--oransje);
+  --knapptekst: #000;
+}
+
+* { box-sizing: border-box; }
+
+html, body { overflow-x: hidden; }
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--tekst);
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+a { color: var(--tekst); }
+
+.wrap {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
+}
+
+.wrap.brei { max-width: 1100px; }
+
+h1 { margin: 10px 0 20px; }
+
+/* Klubbprofil: gotisk skrift som i merket (berre overskrifter – brødtekst skal vere lett å lese) */
+.fraktur, h1 {
+  font-family: "UnifrakturCook", "Old English Text MT", serif;
+  font-weight: 700;
+  letter-spacing: .5px;
+}
+
+.logo { display: block; height: auto; filter: drop-shadow(0 0 1.5px rgba(255,255,255,.7)); }
+
+.topp {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 0 18px;
+}
+.topp .logo { width: 64px; }
+.topp h1 { margin: 0; font-size: 34px; }
+
+/* Oransje stripe tvers over sida med vinge-logoen, som på veggen i lokalet */
+.stripe {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  padding: 8px 0;
+  text-align: center;
+  background: linear-gradient(to bottom,
+    var(--bg) 0, var(--bg) 41%,
+    var(--oransje) 41%, var(--oransje) 63%,
+    var(--bg) 63%, var(--bg) 100%);
+}
+.stripe .vinge { display: block; margin: 0 auto; width: 92%; max-width: 560px; height: auto; }
+.stripe + h1 { text-align: center; margin-top: 6px; }
+
+.kort { border-top: 3px solid var(--oransje); }
+
+.kort {
+  background: var(--kort);
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.dempa { color: var(--dempa); }
+.ok { color: var(--gronn); font-weight: bold; }
+.feil { color: var(--raud); font-weight: bold; }
+.vars { color: var(--gul); font-weight: bold; }
+
+label { display: block; margin-top: 12px; font-weight: bold; }
+
+input, select, textarea {
+  width: 100%;
+  padding: 12px;
+  margin-top: 6px;
+  font-size: 17px;
+  border: 1px solid var(--linje);
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+}
+
+button, .knapp {
+  display: inline-block;
+  padding: 12px 18px;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--knapp);
+  color: var(--knapptekst);
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+}
+
+button.stor, .knapp.stor {
+  display: block;
+  width: 100%;
+  padding: 20px;
+  font-size: 22px;
+}
+
+button.sekundar { background: #444; color: #fff; }
+button.fare { background: var(--raud); color: #111; }
+button.liten { padding: 6px 10px; font-size: 14px; margin-top: 0; }
+button:disabled { opacity: .5; cursor: default; }
+
+/* Svaralternativ på posten – store for hanskar */
+.alternativ {
+  display: block;
+  width: 100%;
+  padding: 22px 16px;
+  margin-top: 12px;
+  border: 3px solid #555;
+  border-radius: 10px;
+  background: var(--kort2);
+  color: #fff;
+  font-size: 22px;
+  text-align: left;
+}
+
+.alternativ.valt { border-color: var(--oransje); background: #3a2200; }
+
+.stor-tekst { font-size: 26px; font-weight: bold; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 6px; border-bottom: 1px solid var(--linje); text-align: left; vertical-align: top; }
+
+.rad { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rad > * { margin-top: 0; }
+
+.fanar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.fanar button { margin-top: 0; background: #333; color: #fff; }
+.fanar button.aktiv { background: var(--oransje); color: #000; }
+
+.merke {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  background: #333;
+}
+.merke.gronn { background: var(--gronn); color: #111; }
+.merke.gul { background: var(--gul); color: #111; }
+.merke.raud { background: var(--raud); color: #111; }
+
+.modal-bak {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.8);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+.modal {
+  background: var(--kort);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+}
+.qr-boks { background: #fff; padding: 16px; display: inline-block; border-radius: 8px; margin: 16px 0; }
+.qr-boks img, .qr-boks canvas { display: block; max-width: 100%; height: auto; }

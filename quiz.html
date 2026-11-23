@@ -4,132 +4,68 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC Quiz - Vikenes MC</title>
-
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #fff;
-    }
-
-    .quiz-wrap {
-      max-width: 700px;
-      margin: 60px auto;
-      padding: 20px;
-    }
-
-    h1 {
-      text-align: center;
-    }
-
-    .card {
-      background: #1b1b1b;
-      padding: 30px;
-      border-radius: 10px;
-      margin-top: 30px;
-    }
-
-    .start-button {
-      display: block;
-      width: 100%;
-      padding: 15px;
-      margin-top: 20px;
-      border: 0;
-      border-radius: 6px;
-      font-size: 18px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    a {
-      color: #fff;
-    }
-  </style>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
+  <link rel="stylesheet" href="stil.css">
 </head>
-
 <body>
-
-  <div class="quiz-wrap">
+  <div class="wrap">
     <p><a href="index.html">← Tilbake til Vikenes MC</a></p>
+    <div class="stripe"><img class="vinge" src="vinge-logo.png" alt="Vikenes MC"></div>
+    <h1>MC Quiz – påmelding</h1>
 
-    <h1>MC Quiz</h1>
+    <div class="kort" id="skjema">
+      <label for="name">Namn</label>
+      <input id="name" type="text" autocomplete="name" placeholder="Skriv namnet ditt">
 
-    <div class="card">
-      <h2>Velkommen</h2>
-      <p>
-        Her startar Vikenes MC sin MC Quiz.
-      </p>
+      <label for="phone">Telefonnummer</label>
+      <input id="phone" type="tel" autocomplete="tel" placeholder="Telefonnummer">
 
-  <button class="start-button" onclick="showRegistration()">
-  Start quiz
-</button>
+      <button class="stor" id="meldPaa" onclick="registrer()">Meld meg på</button>
+      <p id="melding" class="feil"></p>
+    </div>
 
-<div id="registration" style="display:none; margin-top:25px;">
-  <h2>Registrering</h2>
-
-  <label for="name">Namn</label>
-  <input
-    id="name"
-    type="text"
-    placeholder="Skriv namnet ditt"
-    style="width:100%; padding:14px; margin:8px 0 18px; box-sizing:border-box;"
-  >
-
-  <label for="phone">Telefonnummer</label>
-  <input
-    id="phone"
-    type="tel"
-    placeholder="Telefonnummer"
-    style="width:100%; padding:14px; margin:8px 0 18px; box-sizing:border-box;"
-  >
-
-  <button class="start-button" onclick="registerParticipant()">
-  Registrer
-</button>
-</div>
-
-<script>
-  function showRegistration() {
-    document.getElementById("registration").style.display = "block";
-  }
-  async function registerParticipant() {
-  const name = document.getElementById("name").value.trim();
-  const phone = document.getElementById("phone").value.trim();
-
-  if (!name || !phone) {
-    alert("Fyll inn namn og telefonnummer.");
-    return;
-  }
-
-  const response = await fetch(
-    "https://yrozxcxjqxfwbbdwlwwi.supabase.co/rest/v1/participants",
-    {
-      method: "POST",
-      headers: {
-        "apikey": "sb_publishable_eb4NTorneozNeCZU7GnGFQ_ybS53nn5",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-      },
-      body: JSON.stringify({
-        name: name,
-        phone: phone,
-        event_id: 1,
-        paid: false
-      })
-    }
-  );
-
-  if (response.ok) {
-    alert("Registreringa er lagra!");
-  } else {
-    const errorText = await response.text();
-    alert("Noko gjekk gale: " + errorText);
-  }
-}
-</script>
+    <div class="kort" id="takk" style="display:none">
+      <p class="stor-tekst ok">Du er påmeld! ✓</p>
+      <p>Betal kontant hos arrangøren. Når alle er påmelde, blir de fordelte i grupper.</p>
+      <p class="dempa">Du treng ikkje gjere noko meir på mobilen. Leiaren i gruppa di blir vald ved start.</p>
+      <button class="sekundar" onclick="nyPaamelding()">Meld på ein til</button>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="felles.js"></script>
+  <script>
+    async function registrer() {
+      const namn = document.getElementById("name").value.trim();
+      const tlf = document.getElementById("phone").value.trim();
+      const melding = document.getElementById("melding");
+      melding.textContent = "";
+
+      if (namn.length < 2 || tlf.replace(/\D/g, "").length < 8) {
+        melding.textContent = "Fyll inn namn og telefonnummer (minst 8 siffer).";
+        return;
+      }
+
+      const knapp = document.getElementById("meldPaa");
+      knapp.disabled = true;
+      try {
+        await rpc("register_participant", { p_name: namn, p_phone: tlf });
+        document.getElementById("skjema").style.display = "none";
+        document.getElementById("takk").style.display = "block";
+      } catch (e) {
+        melding.textContent = "Noko gjekk gale. Prøv igjen, eller meld deg på hos arrangøren.";
+        console.error(e);
+      } finally {
+        knapp.disabled = false;
+      }
+    }
+
+    function nyPaamelding() {
+      document.getElementById("name").value = "";
+      document.getElementById("phone").value = "";
+      document.getElementById("takk").style.display = "none";
+      document.getElementById("skjema").style.display = "block";
+    }
+  </script>
 </body>
 </html>

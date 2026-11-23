@@ -5,7 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vikenes MC</title>
 
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
   <style>
+    header h1, .hero h2, .about h2 {
+      font-family: "UnifrakturCook", "Old English Text MT", serif;
+    }
+
+    /* Oransje stripe med vinge-logo, som på veggen i lokalet */
+    .stripe {
+      padding: 10px 0;
+      background: linear-gradient(to bottom,
+        #111 0, #111 41%, #FC8D00 41%, #FC8D00 63%, #111 63%, #111 100%);
+    }
+    .stripe img { display: block; margin: 0 auto; width: 92%; max-width: 640px; height: auto; }
+    header { border-bottom: 3px solid #FC8D00 !important; }
+    .quiz-button { background: #FC8D00 !important; color: #000 !important; }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -96,6 +111,8 @@
       <a href="quiz.html">MC Quiz</a>
     </nav>
   </header>
+
+  <div class="stripe"><img src="vinge-logo.png" alt="Vikenes MC logo"></div>
 
   <section class="hero">
     <div>
