@@ -932,5 +932,128 @@ begin
 end $$;
 grant execute on function public.screen_data() to anon, authenticated;
 
+-- =====================================================================
+-- Tillegg 2026-11-24 (4): ny regel for seine deltakarar (Kay)
+--   1. Fyll grupper som ikkje har starta opp til 5 (minste først, likt → siste).
+--   2. Er 3 eller fleire til overs (seine + dei som er nr. 6/7 i ei gruppe som
+--      ikkje har starta), blir dei ei eiga gruppe (inntil 5). Leiaren blir aldri flytta.
+--   3. 1–2 til overs → minste gruppe som ikkje har starta (blir 6–7).
+--   Over 5 berre når det ikkje kan lagast fleire grupper (maks 13 / 2 timar).
+--   Er alle gruppene ute, får 1–2 seine likevel ei eiga gruppe.
+-- =====================================================================
+create or replace function public.add_late_participants()
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_interval int;
+  v_first timestamptz;
+  v_pool bigint[];       -- seine som ikkje er plasserte
+  v_over bigint[];       -- nr. 6+ i grupper som ikkje har starta
+  v_take bigint[];
+  v_n int;
+  v_group bigint;
+  v_pos int;
+  v_start timestamptz;
+  v_placed int := 0;
+  v_new int := 0;
+  v_moved int := 0;
+  v_unplaced json;
+  g record;
+begin
+  if not public.is_admin() then
+    raise exception 'Berre admin';
+  end if;
+  if not exists (select 1 from public.groups where event_id = v_event) then
+    raise exception 'Fordel grupper først';
+  end if;
+  select greatest(coalesce(start_interval_min, 10), 10), first_start into v_interval, v_first
+    from public.events where id = v_event;
+
+  v_pool := array(select id from public.participants
+                   where event_id = v_event and paid and group_id is null order by id);
+  if coalesce(array_length(v_pool, 1), 0) = 0 then
+    return json_build_object('placed', 0, 'new_groups', 0, 'moved', 0, 'unplaced', '[]'::json);
+  end if;
+
+  -- 1. Fyll opp til 5
+  while coalesce(array_length(v_pool, 1), 0) > 0 loop
+    select gg.id into v_group
+      from public.groups gg
+     where gg.event_id = v_event and gg.finished_at is null and gg.start_at > now()
+       and (select count(*) from public.participants x where x.group_id = gg.id) < 5
+     order by (select count(*) from public.participants x where x.group_id = gg.id), gg.position desc
+     limit 1;
+    exit when v_group is null;
+    update public.participants set group_id = v_group where id = v_pool[1];
+    v_placed := v_placed + 1;
+    v_pool := v_pool[2:];
+  end loop;
+
+  -- 2. Nye grupper når minst 3 er til overs
+  if coalesce(array_length(v_pool, 1), 0) > 0 then
+    v_over := '{}';
+    for g in select gg.id, gg.leader_participant_id from public.groups gg
+              where gg.event_id = v_event and gg.finished_at is null and gg.start_at > now()
+    loop
+      v_over := v_over || array(
+        select x.id from public.participants x
+         where x.group_id = g.id and x.id is distinct from g.leader_participant_id
+         order by x.id desc
+         limit greatest(0, (select count(*) from public.participants y where y.group_id = g.id) - 5));
+    end loop;
+
+    while coalesce(array_length(v_pool, 1), 0) + coalesce(array_length(v_over, 1), 0) >= 3 loop
+      select max(position), greatest(max(start_at), now()) + make_interval(mins => v_interval)
+        into v_pos, v_start from public.groups where event_id = v_event;
+      exit when (select count(*) from public.groups where event_id = v_event) >= 13
+             or (v_first is not null and v_start > v_first + interval '2 hours');
+      insert into public.groups (name, event_id, position, start_at)
+      values ('Gruppe ' || (v_pos + 1), v_event, v_pos + 1, v_start)
+      returning id into v_group;
+      v_new := v_new + 1;
+      -- seine først, så dei som er nr. 6+ (inntil 5 i gruppa)
+      v_take := coalesce(v_pool[1:5], '{}');
+      v_pool := coalesce(v_pool[6:], '{}');
+      v_n := least(5 - coalesce(array_length(v_take, 1), 0), coalesce(array_length(v_over, 1), 0));
+      if v_n > 0 then
+        v_take := v_take || v_over[1:v_n];
+        v_over := coalesce(v_over[v_n + 1:], '{}');
+        v_moved := v_moved + v_n;
+      end if;
+      update public.participants set group_id = v_group where id = any(v_take);
+      v_placed := v_placed + coalesce(array_length(v_take, 1), 0);
+    end loop;
+  end if;
+
+  -- 3. 1–2 til overs (eller maks nådd): minste gruppe som ikkje har starta
+  while coalesce(array_length(v_pool, 1), 0) > 0 loop
+    select gg.id into v_group
+      from public.groups gg
+     where gg.event_id = v_event and gg.finished_at is null and gg.start_at > now()
+     order by (select count(*) from public.participants x where x.group_id = gg.id), gg.position desc
+     limit 1;
+    if v_group is null then
+      -- alle er ute: eiga gruppe om grensene tillèt det
+      select max(position), greatest(max(start_at), now()) + make_interval(mins => v_interval)
+        into v_pos, v_start from public.groups where event_id = v_event;
+      exit when (select count(*) from public.groups where event_id = v_event) >= 13
+             or (v_first is not null and v_start > v_first + interval '2 hours');
+      insert into public.groups (name, event_id, position, start_at)
+      values ('Gruppe ' || (v_pos + 1), v_event, v_pos + 1, v_start)
+      returning id into v_group;
+      v_new := v_new + 1;
+    end if;
+    update public.participants set group_id = v_group where id = v_pool[1];
+    v_placed := v_placed + 1;
+    v_pool := v_pool[2:];
+  end loop;
+
+  select coalesce(json_agg(name order by id), '[]'::json) into v_unplaced
+    from public.participants where id = any(v_pool);
+  return json_build_object('placed', v_placed - v_moved, 'new_groups', v_new, 'moved', v_moved, 'unplaced', v_unplaced);
+end $$;
+revoke all on function public.add_late_participants() from public, anon;
+grant execute on function public.add_late_participants() to authenticated;
+
 -- Admin-brukaren: legg inn e-posten i ein eigen, separat kommando (ikkje i denne fila):
 --   insert into public.admins (email) values ('<klubben sin e-post>') on conflict do nothing;
