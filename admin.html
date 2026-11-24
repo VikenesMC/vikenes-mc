@@ -528,8 +528,8 @@
             : `<span class="dempa">Alle som har betalt, har gruppe.</span>`}</p>
           ${ikkjeBetalt.length ? `<p class="feil" style="margin:6px 0">Ikkje betalt (${ikkjeBetalt.length}): ${ikkjeBetalt.map(p => esc(p.name)).join(", ")}</p>` : ""}
           <button onclick="leggTilSeine()" ${utanGruppe.length ? "" : "disabled"}>Legg til seine</button>
-          <p class="dempa" style="margin-bottom:0">Legg dei i den minste gruppa som ikkje har køyrt ut. Ingen andre blir flytta.
-            Ny gruppe blir laga berre om alle gruppene er ute.</p>
+          <p class="dempa" style="margin-bottom:0">Fyller gruppene som ikkje har køyrt ut opp til 5. Er 3 eller fleire til overs, blir dei ei ny gruppe
+            (òg dei som er nr. 6–7 i ei gruppe). 1–2 til overs går i den minste gruppa. Over 5 berre når maks 13 grupper / 2 timar er nådd.</p>
         </div>` : ""}
 
         ${D.grupper.length ? `
@@ -586,6 +586,7 @@
         await oppdater();
         let tekst = `${r.placed} lagt til i grupper.`;
         if (r.new_groups) tekst += ` ${r.new_groups} ny gruppe laga – vel leiar for henne.`;
+        if (r.moved) tekst += ` ${r.moved} som var nr. 6–7 i ei gruppe, vart flytta til den nye gruppa.`;
         if (r.unplaced && r.unplaced.length) tekst += `\n\nFekk ikkje plass (maks 13 grupper / 2 timar): ${r.unplaced.join(", ")}. Vel gruppe for dei under Deltakarar.`;
         alert(tekst);
       } catch (e) {
