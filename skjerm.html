@@ -20,8 +20,10 @@
     .ute { display: grid; grid-template-columns: 1.15fr 1fr; gap: 2.5vw; padding: 1.5vw 3vw 3vw; height: calc(100vh - 13.8vw); }
     .venstre { display: flex; flex-direction: column; justify-content: center; gap: 1.4vw; min-height: 0; }
     .klokke { font-size: 9vw; font-weight: bold; line-height: 1; text-align: center; }
-    .gruppekort { background: var(--kort); border-radius: 1vw; padding: 1.4vw 1.8vw; border-left: .6vw solid var(--oransje); }
-    .gruppekort.deretter { border-left-color: #555; }
+    .gruppekort { background: var(--kort); border-radius: 1vw; padding: 1.4vw 1.8vw; border: .25vw solid var(--oransje); }
+    .gruppekort.deretter { border-color: #555; }
+    .gruppekort .leiar { font-size: 1.7vw; margin-top: .5vw; color: var(--oransje); }
+    .gruppekort.deretter .leiar { font-size: 1.4vw; }
     .gruppekort .etikett { font-size: 1.5vw; color: var(--dempa); text-transform: uppercase; letter-spacing: .1vw; }
     .gruppekort .gnamn { font-size: 3.4vw; font-weight: bold; }
     .gruppekort .nedtelling { font-size: 4.6vw; font-weight: bold; color: var(--oransje); }
@@ -30,7 +32,7 @@
     .gruppekort.deretter .namn { font-size: 1.7vw; color: var(--dempa); }
     .melding { font-size: 3vw; text-align: center; }
 
-    .tavle { background: var(--kort); border-radius: 1.2vw; padding: 2vw; overflow: hidden; border-top: .4vw solid var(--oransje); }
+    .tavle { background: var(--kort); border-radius: 1.2vw; padding: 2vw; overflow: hidden; border: .25vw solid var(--oransje); }
     .tavle h2 { margin: 0 0 1vw; font-size: 2.6vw; }
     .tavle table { font-size: 2vw; }
     .tavle td, .tavle th { padding: .7vw .5vw; }
@@ -86,6 +88,9 @@
     const klokke = t => `${to(t.getHours())}:${to(t.getMinutes())}:${to(t.getSeconds())}`;
     const namnliste = g => (g.members && g.members.length) ? g.members.map(esc).join(", ") : "<span class='dempa'>Ingen medlemmer</span>";
 
+    // Leiaren blir vald ved start – vis berre når han er vald
+    const leiarLinje = g => g.leader ? `<div class="leiar">Leiar: <b>${esc(g.leader)}</b></div>` : "";
+
     function nedtelling(sek) {
       return sek >= 3600
         ? `${Math.floor(sek / 3600)}:${to(Math.floor(sek / 60) % 60)}:${to(sek % 60)}`
@@ -140,12 +145,14 @@
               <span class="nedtelling tal">${nedtelling(sek)}</span>
             </div>
             <div class="namn">${namnliste(neste)}</div>
+            ${leiarLinje(neste)}
           </div>
           ${deretter ? `
           <div class="gruppekort deretter">
             <div class="etikett">Deretter · kl. ${klokkeslett(deretter.start_at)}</div>
             <div class="gnamn">${esc(deretter.name)}</div>
             <div class="namn">${namnliste(deretter)}</div>
+            ${leiarLinje(deretter)}
           </div>` : ""}`;
       } else if (data.groups.every(g => g.finished)) {
         el.innerHTML = `<div class="melding ok">Alle gruppene er i mål! 🏁</div>`;
