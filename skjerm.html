@@ -58,6 +58,24 @@
     .gk .status { font-size: 1vw; }
     .gk.innsjekk { border-color: #e53935; }
     .gk .leiar { font-size: 1.1vw; color: var(--oransje); margin: -.1vw 0 .4vw; }
+
+    /* ---------- RESULTAT (når alle er i mål) ---------- */
+    .resultat { display: flex; flex-direction: column; gap: 1vw; min-height: 0; }
+    .resultat h2 { font-size: 2.6vw; margin: 0; text-align: center; }
+    .pall { display: flex; justify-content: center; align-items: flex-end; gap: 1.5vw; }
+    .pk { background: var(--kort); border-radius: 1vw; padding: .8vw 1.5vw; text-align: center; border: .3vw solid; flex: 0 1 26vw; }
+    .pk .plass-nr { font-size: 3.6vw; font-weight: bold; line-height: 1; }
+    .pk .medalje { font-size: 2.2vw; line-height: 1; }
+    .pk .gnamn { font-size: 2vw; font-weight: bold; margin-top: .3vw; }
+    .pk .poeng { font-size: 2.5vw; font-weight: bold; margin: .2vw 0; text-align: center; }
+    .pk .namn { font-size: 1.1vw; color: var(--dempa); }
+    .pk.p1 { border-color: #FFD54F; padding-top: 1.6vw; padding-bottom: 1.6vw; }
+    .pk.p1 .plass-nr, .pk.p1 .poeng { color: #FFD54F; }
+    .pk.p2 { border-color: #CFD8DC; } .pk.p2 .plass-nr, .pk.p2 .poeng { color: #CFD8DC; }
+    .pk.p3 { border-color: #D7A26B; } .pk.p3 .plass-nr, .pk.p3 .poeng { color: #D7A26B; }
+    .pk .likt-merke { display: inline-block; margin-top: .4vw; background: #e53935; color: #fff; border-radius: .5vw; padding: .2vw .6vw; font-size: 1.1vw; font-weight: bold; }
+    .resten { display: grid; grid-template-columns: repeat(3, 1fr); gap: .2vw 3vw; font-size: 1.3vw; max-width: 80vw; margin: 0 auto; width: 100%; }
+    .resten div { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding: .2vw 0; }
     .gk.innsjekk .gnamn { color: #ff6b5e; }
 
     @media (max-width: 800px) {
@@ -98,15 +116,16 @@
         : `${to(Math.floor(sek / 60))}:${to(sek % 60)}`;
     }
 
-    // Gruppene som ikkje har starta enno, i startrekkjefølgje
+    // Gruppene som ikkje har starta enno (og ikkje er i mål), i startrekkjefølgje
     function ventande(t) {
       return data.groups
-        .filter(g => g.start_at && new Date(g.start_at) > t)
+        .filter(g => !g.finished && g.start_at && new Date(g.start_at) > t)
         .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
     }
 
     function statusMerke(g, t) {
       if (g.finished) return `<span class="merke gronn">I mål</span>`;
+      // (Ei gruppe som er i mål blir aldri vist som «Ventar»)
       if (!g.start_at || new Date(g.start_at) > t) return `<span class="merke">Ventar</span>`;
       return `<span class="merke gul">Ute · post ${g.stops_handled}/${data.stops_total}</span>`;
     }
@@ -206,8 +225,52 @@
       else linje.textContent = "Alle gruppene er ute";
     }
 
+    // Plassering: likt poeng = same plass (1, 1, 3 …)
+    function plasseringar() {
+      const grupper = [...data.groups].sort((a, b) => b.points - a.points || a.position - b.position);
+      const telling = {};
+      grupper.forEach(g => { telling[g.points] = (telling[g.points] || 0) + 1; });
+      let plass = 0, forrige = null;
+      return grupper.map((g, i) => {
+        if (g.points !== forrige) { plass = i + 1; forrige = g.points; }
+        return { g, plass, likt: telling[g.points] > 1 };
+      });
+    }
+
+    const alleIMaal = () => data.groups.length > 0 && data.groups.every(g => g.finished);
+
+    // Når siste gruppe er i mål: vis 1., 2. og 3. plass tydeleg
+    function resultatInne() {
+      const p = plasseringar();
+      const pall = p.filter(x => x.plass <= 3);
+      // Klassisk pall: 2 – 1 – 3 (likt på same plass står ved sida av kvarandre)
+      const rekkje = [...pall.filter(x => x.plass === 2), ...pall.filter(x => x.plass === 1), ...pall.filter(x => x.plass === 3)];
+      const medalje = { 1: "🥇", 2: "🥈", 3: "🥉" };
+      const resten = p.filter(x => x.plass > 3);
+      document.getElementById("rutenett").className = "";
+      document.getElementById("rutenett").innerHTML = `
+        <div class="resultat">
+          <h2>Resultat</h2>
+          <div class="pall">
+            ${rekkje.map(x => `
+              <div class="pk p${x.plass}">
+                <div class="medalje">${medalje[x.plass]}</div>
+                <div class="plass-nr">${x.plass}. plass</div>
+                <div class="gnamn">${esc(x.g.name)}</div>
+                <div class="poeng tal">${x.g.points} poeng</div>
+                <div class="namn">${namnliste(x.g)}</div>
+                ${x.likt ? `<div class="likt-merke">Likt – utslagsspørsmål</div>` : ""}
+              </div>`).join("")}
+          </div>
+          ${resten.length ? `<div class="resten">${resten.map(x => `
+            <div><span>${x.plass}. ${esc(x.g.name)}${x.likt ? ` <span class="merke raud">likt</span>` : ""}</span><b class="tal">${x.g.points}</b></div>`).join("")}</div>` : ""}
+        </div>`;
+    }
+
     function kortInne() {
+      if (alleIMaal()) return resultatInne();
       const t = na();
+      document.getElementById("rutenett").className = "rutenett";
       const neste = ventande(t)[0];
       const grupper = [...data.groups].sort((a, b) => a.position - b.position);
       // Påmelde som ikkje har betalt: eige kort først (nemn ikkje betaling på skjermen)
