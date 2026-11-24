@@ -1055,5 +1055,52 @@ end $$;
 revoke all on function public.add_late_participants() from public, anon;
 grant execute on function public.add_late_participants() to authenticated;
 
+-- =====================================================================
+-- Tillegg 2026-11-24 (5): påmelding – rett telefonnummer og ingen doble
+--   Telefon: berre siffer, norsk nummer = 8 siffer (+47 / 0047 blir fjerna).
+--   Same telefon er alt påmeld → stopp. Same namn → spør om det er ein annan person.
+-- =====================================================================
+create or replace function public._norm_tlf(p text)
+returns text language sql immutable as $$
+  select case
+    when d ~ '^0047[0-9]{8}$' then substr(d, 5)
+    when d ~ '^47[0-9]{8}$' and p ~ '^\s*\+' then substr(d, 3)
+    else d
+  end
+  from (select regexp_replace(coalesce(p, ''), '[\s\-\+]', '', 'g') as d) x
+$$;
+revoke all on function public._norm_tlf(text) from public, anon, authenticated;
+
+drop function if exists public.register_participant(text, text);
+create or replace function public.register_participant(p_name text, p_phone text, p_same_name_ok boolean default false)
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_tlf text;
+  v_id bigint;
+begin
+  p_name := regexp_replace(trim(coalesce(p_name, '')), '\s+', ' ', 'g');
+  if length(p_name) < 2 or length(p_name) > 80 then
+    return json_build_object('status', 'bad_name');
+  end if;
+  v_tlf := public._norm_tlf(p_phone);
+  if v_tlf !~ '^[0-9]{8}$' then
+    return json_build_object('status', 'bad_phone');
+  end if;
+  if exists (select 1 from public.participants
+              where event_id = v_event and public._norm_tlf(phone) = v_tlf) then
+    return json_build_object('status', 'phone_exists');
+  end if;
+  if not p_same_name_ok and exists (select 1 from public.participants
+              where event_id = v_event and lower(name) = lower(p_name)) then
+    return json_build_object('status', 'name_exists');
+  end if;
+  insert into public.participants (name, phone, event_id, paid)
+  values (p_name, v_tlf, v_event, false)
+  returning id into v_id;
+  return json_build_object('status', 'ok', 'id', v_id);
+end $$;
+grant execute on function public.register_participant(text, text, boolean) to anon, authenticated;
+
 -- Admin-brukaren: legg inn e-posten i ein eigen, separat kommando (ikkje i denne fila):
 --   insert into public.admins (email) values ('<klubben sin e-post>') on conflict do nothing;
