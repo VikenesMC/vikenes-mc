@@ -755,5 +755,148 @@ revoke all on function public._group_points(bigint) from public, anon, authentic
 grant execute on function public.open_stop(text, text, boolean) to anon, authenticated;
 grant execute on function public.answer_question(text, bigint, smallint, numeric) to anon, authenticated;
 
+-- =====================================================================
+-- Tillegg 2026-11-24 (2): seine deltakarar og innsjekk-liste
+-- =====================================================================
+
+-- Fordel grupper: berre når det ikkje finst grupper (nullstill først) – ingen blir flytta ved ein feil.
+create or replace function public.distribute_groups(p_first_start timestamptz)
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_n int;
+  v_k int;
+  v_interval int;
+  i int;
+begin
+  if not public.is_admin() then
+    raise exception 'Berre admin';
+  end if;
+  if exists (select 1 from public.groups where event_id = v_event) then
+    raise exception 'Det finst alt grupper. Nullstill (slett gruppene) før du fordeler på nytt.';
+  end if;
+
+  select count(*) into v_n from public.participants where event_id = v_event and paid;
+  if v_n < 2 then
+    raise exception 'Må ha minst 2 betalte deltakarar';
+  end if;
+
+  v_k := least(13, greatest(2, round(v_n / 5.0)::int));
+  select start_interval_min into v_interval from public.events where id = v_event;
+  v_interval := greatest(coalesce(v_interval, 10), 10);
+
+  update public.participants set group_id = null where event_id = v_event;
+  update public.events set first_start = p_first_start where id = v_event;
+
+  for i in 1..v_k loop
+    insert into public.groups (name, event_id, position, start_at)
+    values ('Gruppe ' || i, v_event, i, p_first_start + make_interval(mins => (i - 1) * v_interval));
+  end loop;
+
+  with blanda as (
+    select id, (row_number() over (order by random()) - 1) as rn
+      from public.participants
+     where event_id = v_event and paid
+  )
+  update public.participants p
+     set group_id = g.id
+    from blanda b
+    join public.groups g on g.event_id = v_event and g.position = (b.rn % v_k) + 1
+   where p.id = b.id;
+
+  return json_build_object('groups', v_k, 'participants', v_n);
+end $$;
+revoke all on function public.distribute_groups(timestamptz) from public, anon;
+grant execute on function public.distribute_groups(timestamptz) to authenticated;
+
+-- Legg til seine: betalte utan gruppe går i den minste gruppa som ikkje har starta
+-- (likt → den siste). Ingen blir flytta. Ny gruppe berre når alle har køyrt ut,
+-- innanfor 13 grupper og 2 timar frå første start.
+create or replace function public.add_late_participants()
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_interval int;
+  v_first timestamptz;
+  p record;
+  v_group bigint;
+  v_last record;
+  v_start timestamptz;
+  v_placed int := 0;
+  v_new int := 0;
+  v_unplaced json := '[]'::json;
+begin
+  if not public.is_admin() then
+    raise exception 'Berre admin';
+  end if;
+  if not exists (select 1 from public.groups where event_id = v_event) then
+    raise exception 'Fordel grupper først';
+  end if;
+  select greatest(coalesce(start_interval_min, 10), 10), first_start into v_interval, v_first
+    from public.events where id = v_event;
+
+  for p in select id, name from public.participants
+            where event_id = v_event and paid and group_id is null order by id
+  loop
+    select g.id into v_group
+      from public.groups g
+     where g.event_id = v_event and g.finished_at is null and g.start_at > now()
+     order by (select count(*) from public.participants x where x.group_id = g.id), g.position desc
+     limit 1;
+
+    if v_group is null then
+      select max(position) as pos, max(start_at) as st, count(*) as n into v_last
+        from public.groups where event_id = v_event;
+      v_start := greatest(v_last.st, now()) + make_interval(mins => v_interval);
+      if v_last.n >= 13 or (v_first is not null and v_start > v_first + interval '2 hours') then
+        v_unplaced := (select json_agg(n) from (select json_array_elements_text(v_unplaced) as n union all select p.name) u);
+        continue;
+      end if;
+      insert into public.groups (name, event_id, position, start_at)
+      values ('Gruppe ' || (v_last.pos + 1), v_event, v_last.pos + 1, v_start)
+      returning id into v_group;
+      v_new := v_new + 1;
+    end if;
+
+    update public.participants set group_id = v_group where id = p.id;
+    v_placed := v_placed + 1;
+  end loop;
+
+  return json_build_object('placed', v_placed, 'new_groups', v_new, 'unplaced', v_unplaced);
+end $$;
+revoke all on function public.add_late_participants() from public, anon;
+grant execute on function public.add_late_participants() to authenticated;
+
+-- Skjermen: no òg kortnamn på dei som har meldt seg på men ikkje betalt (innsjekk)
+create or replace function public.screen_data()
+returns json language plpgsql stable security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_total int;
+begin
+  select count(*) into v_total from public._route_stops(v_event);
+  return json_build_object(
+    'now', now(),
+    'stops_total', v_total,
+    'not_checked_in', coalesce((select json_agg(public._kort_namn(p.name) order by p.name)
+                                  from public.participants p where p.event_id = v_event and not p.paid), '[]'::json),
+    'groups', coalesce((
+      select json_agg(json_build_object(
+               'name', g.name,
+               'position', g.position,
+               'start_at', g.start_at,
+               'finished', g.finished_at is not null,
+               'points', public._group_points(g.id),
+               'stops_handled', (select count(*) from public.group_stops gs where gs.group_id = g.id),
+               'members', coalesce((select json_agg(public._kort_namn(p.name) order by p.name)
+                                      from public.participants p where p.group_id = g.id), '[]'::json)
+             ) order by g.position)
+        from public.groups g
+       where g.event_id = v_event
+    ), '[]'::json)
+  );
+end $$;
+grant execute on function public.screen_data() to anon, authenticated;
+
 -- Admin-brukaren: legg inn e-posten i ein eigen, separat kommando (ikkje i denne fila):
 --   insert into public.admins (email) values ('<klubben sin e-post>') on conflict do nothing;
