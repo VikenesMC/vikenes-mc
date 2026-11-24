@@ -53,6 +53,8 @@
     .gk .tid { font-size: 1.6vw; color: var(--oransje); font-weight: bold; }
     .gk .namn { font-size: 1.25vw; margin: .4vw 0; line-height: 1.3; }
     .gk .status { font-size: 1vw; }
+    .gk.innsjekk { border-top-color: #e53935; box-shadow: 0 0 0 .2vw #e53935; }
+    .gk.innsjekk .gnamn { color: #ff6b5e; }
 
     @media (max-width: 800px) {
       body { overflow: auto; }
@@ -199,7 +201,14 @@
       const t = na();
       const neste = ventande(t)[0];
       const grupper = [...data.groups].sort((a, b) => a.position - b.position);
-      document.getElementById("rutenett").innerHTML = grupper.map(g => `
+      // Påmelde som ikkje har betalt: eige kort først
+      const innsjekk = (data.not_checked_in || []).length ? `
+        <div class="gk innsjekk">
+          <div class="rad1"><span class="gnamn">Meld dykk i innsjekken</span></div>
+          <div class="namn">${data.not_checked_in.map(esc).join(", ")}</div>
+          <div class="status dempa">Betal ved bordet, så får de gruppe</div>
+        </div>` : "";
+      document.getElementById("rutenett").innerHTML = innsjekk + grupper.map(g => `
         <div class="gk ${neste && neste.name === g.name ? "neste" : ""}">
           <div class="rad1">
             <span class="gnamn">${esc(g.name)}</span>

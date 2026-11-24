@@ -507,6 +507,7 @@
       const iGang = D.grupper.some(g => g.leader_token || g.finished_at) || D.svar.some(s => D.grupper.some(g => g.id === s.group_id));
       const aktivRute = D.ruter.find(r => r.id === D.ev.active_route_id);
       const utanGruppe = D.deltakarar.filter(p => p.paid && !p.group_id);
+      const ikkjeBetalt = D.deltakarar.filter(p => !p.paid);
 
       return `
         <div class="kort">
@@ -514,10 +515,22 @@
           <p>Betalte deltakarar: <b>${betalte}</b></p>
           <label for="forsteStart">Første start</label>
           <input id="forsteStart" type="datetime-local" value="${standardStart()}" style="max-width:280px">
-          <button onclick="fordelGrupper()" ${iGang ? "disabled" : ""}>${D.grupper.length ? "Fordel grupper på nytt" : "Fordel grupper"}</button>
+          <button onclick="fordelGrupper()" ${D.grupper.length ? "disabled" : ""}>Fordel grupper</button>
           <p class="dempa">Ca. 5 per gruppe, minst 2 og maks 13 grupper, tilfeldig blanda. ${MIN_PER_POST} min mellom kvar start.
-            ${iGang ? "<br><b>Gruppene er i gang. Nullstill under for å fordele på nytt.</b>" : ""}</p>
+            ${D.grupper.length ? "<br><b>Gruppene er fordelte. Ingen blir flytta – vil du fordele på nytt, må du nullstille (slett gruppene) først.</b>" : ""}</p>
         </div>
+
+        ${D.grupper.length ? `
+        <div class="kort ${utanGruppe.length ? "vars" : ""}">
+          <b>Seine deltakarar</b>
+          <p style="margin:6px 0">${utanGruppe.length
+            ? `Betalt men utan gruppe (${utanGruppe.length}): ${utanGruppe.map(p => esc(p.name)).join(", ")}`
+            : `<span class="dempa">Alle som har betalt, har gruppe.</span>`}</p>
+          ${ikkjeBetalt.length ? `<p class="feil" style="margin:6px 0">Ikkje betalt (${ikkjeBetalt.length}): ${ikkjeBetalt.map(p => esc(p.name)).join(", ")}</p>` : ""}
+          <button onclick="leggTilSeine()" ${utanGruppe.length ? "" : "disabled"}>Legg til seine</button>
+          <p class="dempa" style="margin-bottom:0">Legg dei i den minste gruppa som ikkje har køyrt ut. Ingen andre blir flytta.
+            Ny gruppe blir laga berre om alle gruppene er ute.</p>
+        </div>` : ""}
 
         ${D.grupper.length ? `
         <div class="kort">
@@ -529,7 +542,6 @@
           </div>
         </div>` : ""}
 
-        ${utanGruppe.length && D.grupper.length ? `<div class="kort vars">Betalt men utan gruppe: ${utanGruppe.map(p => esc(p.name)).join(", ")} – set gruppe under Deltakarar.</div>` : ""}
 
         ${D.grupper.map(g => {
           const medlem = D.deltakarar.filter(p => p.group_id === g.id);
@@ -559,11 +571,23 @@
     async function fordelGrupper() {
       const verdi = document.getElementById("forsteStart").value;
       if (!verdi) return alert("Vel tidspunkt for første start.");
-      if (D.grupper.length && !confirm("Gruppene blir laga på nytt og blanda om. Halde fram?")) return;
       try {
         const r = await rpc("distribute_groups", { p_first_start: new Date(verdi).toISOString() });
         await oppdater();
         alert(`${r.participants} deltakarar fordelte i ${r.groups} grupper.`);
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function leggTilSeine() {
+      try {
+        const r = await rpc("add_late_participants");
+        await oppdater();
+        let tekst = `${r.placed} lagt til i grupper.`;
+        if (r.new_groups) tekst += ` ${r.new_groups} ny gruppe laga – vel leiar for henne.`;
+        if (r.unplaced && r.unplaced.length) tekst += `\n\nFekk ikkje plass (maks 13 grupper / 2 timar): ${r.unplaced.join(", ")}. Vel gruppe for dei under Deltakarar.`;
+        alert(tekst);
       } catch (e) {
         alert(e.message);
       }
