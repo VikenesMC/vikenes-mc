@@ -201,12 +201,11 @@
       const t = na();
       const neste = ventande(t)[0];
       const grupper = [...data.groups].sort((a, b) => a.position - b.position);
-      // Påmelde som ikkje har betalt: eige kort først
+      // Påmelde som ikkje har betalt: eige kort først (nemn ikkje betaling på skjermen)
       const innsjekk = (data.not_checked_in || []).length ? `
         <div class="gk innsjekk">
           <div class="rad1"><span class="gnamn">Meld dykk i innsjekken</span></div>
           <div class="namn">${data.not_checked_in.map(esc).join(", ")}</div>
-          <div class="status dempa">Betal ved bordet, så får de gruppe</div>
         </div>` : "";
       document.getElementById("rutenett").innerHTML = innsjekk + grupper.map(g => `
         <div class="gk ${neste && neste.name === g.name ? "neste" : ""}">
