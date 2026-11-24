@@ -135,17 +135,20 @@
     // PIN før Postar (fasit), Ruter og «Slett gruppene og start på nytt», så
     // ingen kan titte eller rote til noko ved betalingsbordet.
     // Fanene låser seg igjen når ein går til ei anna fane. Berre hash av PIN-en ligg i koden.
-    const PIN_HASH = "9f6406e2585f1e104cfa1740e79265f2ee9d6829d31f6e4b1be163ebcbdfe9b6";
+    const PIN_HASH = "9f6406e2585f1e104cfa1740e79265f2ee9d6829d31f6e4b1be163ebcbdfe9b6";       // hovud-PIN
+    const PIN_SLETT_HASH = "14624ef1af4f3365a5da43bda4dd884ef7f88d394743e74eea9ed1c9529a2e72"; // slett enkeltperson
     const LAASTE_FANER = { postar: "Postar og fasit", ruter: "Ruter" };
     let openFane = null;      // fana som er låst opp no
     let etterPin = null;      // kva som skal skje når PIN er rett
+    let pinHash = PIN_HASH;   // kva PIN som gjeld for skjemaet som står oppe
+    let slettOpen = false;    // sletting av enkeltpersonar er låst opp (til ein byter fane)
 
     async function sjekkPin() {
       const felt = document.getElementById("pinFelt");
       const data = new TextEncoder().encode("vikenesmc:" + felt.value.trim());
       const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", data))]
         .map(b => b.toString(16).padStart(2, "0")).join("");
-      if (hash === PIN_HASH) {
+      if (hash === pinHash) {
         const handling = etterPin;
         etterPin = null;
         handling();
@@ -155,8 +158,9 @@
       }
     }
 
-    function visPin(tittel, tekst, handling, avbrytFane) {
+    function visPin(tittel, tekst, handling, avbrytFane, hash) {
       etterPin = handling;
+      pinHash = hash || PIN_HASH;
       clearInterval(oppdateringsTimer);
       document.getElementById("fane").innerHTML = `
         <div class="kort" style="max-width:320px; margin:30px auto; text-align:center">
@@ -174,6 +178,7 @@
 
     function visFane(namn, behaldScroll) {
       if (namn !== openFane) openFane = null;
+      if (namn !== "deltakarar") slettOpen = false;
       if (LAASTE_FANER[namn] && openFane !== namn) {
         aktivFane = namn;
         document.querySelectorAll(".fanar button").forEach(b => b.classList.toggle("aktiv", b.dataset.fane === namn));
@@ -218,6 +223,7 @@
         <div class="kort">
           <b>${D.deltakarar.length}</b> påmelde · <b class="ok">${betalte}</b> betalt
           <button class="sekundar liten" style="margin-left:10px" onclick="oppdater()">Oppdater</button>
+          ${D.deltakarar.length ? `<button class="fare liten" style="margin-left:10px" onclick="slettAlle()">Slett alle påmelde</button>` : ""}
         </div>
 
         <div class="kort">
@@ -276,10 +282,36 @@
       if (await lagreDb(db.from("participants").update({ group_id: gruppeId ? Number(gruppeId) : null }).eq("id", id))) oppdater();
     }
 
-    async function slettDeltakar(id) {
+    // Slett éin person: PIN 1340 første gong (gjeld til ein byter fane)
+    function slettDeltakar(id) {
+      if (!slettOpen) {
+        return visPin("Slett deltakar", "Skriv PIN for å slette påmelde.",
+                      () => { slettOpen = true; visFane("deltakarar"); slettDeltakarUtfor(id); }, "deltakarar", PIN_SLETT_HASH);
+      }
+      slettDeltakarUtfor(id);
+    }
+
+    async function slettDeltakarUtfor(id) {
       const p = D.deltakarar.find(x => x.id === id);
       if (!confirm("Slette " + (p ? p.name : "deltakaren") + "?")) return;
       if (await lagreDb(db.from("participants").delete().eq("id", id))) oppdater();
+    }
+
+    // Slett alle påmelde (og gruppene): hovud-PIN
+    function slettAlle() {
+      visPin("Slett alle påmelde", "Skriv PIN for å slette alle påmelde.",
+             () => { visFane("deltakarar"); slettAlleUtfor(); }, "deltakarar");
+    }
+
+    async function slettAlleUtfor() {
+      if (!confirm(`Alle ${D.deltakarar.length} påmelde blir sletta${D.grupper.length ? `, og alle ${D.grupper.length} gruppene med svar og poeng` : ""}.\nPostar, spørsmål og ruter blir verande.\n\nDette kan ikkje angrast. Halde fram?`)) return;
+      try {
+        const r = await rpc("delete_all_participants");
+        await oppdater();
+        alert(`Sletta ${r.participants} påmelde og ${r.groups} grupper.`);
+      } catch (e) {
+        alert(e.message);
+      }
     }
 
     // ---------------- Postar og spørsmål ----------------
