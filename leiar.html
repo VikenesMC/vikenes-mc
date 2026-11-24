@@ -13,8 +13,17 @@
     <h1>MC Quiz</h1>
     <div id="innhald"><div class="kort">Lastar …</div></div>
   </div>
+  <div id="skannar"></div>
+
+  <style>
+    /* Skannar inne på sida (same fane – ingen nye vindauge) */
+    .skann-video { width: 100%; border-radius: 8px; background: #000; display: block; }
+    .skann-ramme { position: relative; }
+    .skann-ramme::after { content: ""; position: absolute; inset: 18%; border: 3px solid var(--oransje); border-radius: 12px; pointer-events: none; }
+  </style>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="felles.js"></script>
   <script>
     // Leiar-sida. Tre måtar å kome hit:
@@ -44,9 +53,96 @@
           <p class="stor-tekst">${esc(neste.name)}</p>
           ${neste.address ? `<p>${esc(neste.address)}</p>
             <a class="knapp stor" href="${kartLenke(neste.address)}" target="_blank" rel="noopener">Opne i kart</a>` : ""}
-          ${erMaal ? `<p class="dempa">Skann mål-koden på klubben når de er tilbake.</p>` : `<p class="dempa">Skann QR-koden når de er framme.</p>`}
+          <button class="stor" onclick="opneSkannar()">📷 Skann QR-kode</button>
+          ${erMaal ? `<p class="dempa">Skann mål-koden på klubben når de er tilbake.</p>` : `<p class="dempa">Skann QR-koden når de er framme – trykk knappen over, så opnar kameraet seg her.</p>`}
         </div>`;
     }
+
+    // ---------- Skannar i sida ----------
+    let skannStraum = null;
+    let skannAktiv = false;
+
+    async function opneSkannar() {
+      const boks = document.getElementById("skannar");
+      boks.innerHTML = `
+        <div class="modal-bak">
+          <div class="modal">
+            <p class="stor-tekst">Skann QR-koden</p>
+            <div class="skann-ramme"><video id="skannVideo" class="skann-video" playsinline muted></video></div>
+            <p id="skannMelding" class="dempa">Hald koden inne i ramma.</p>
+            <button class="stor sekundar" onclick="lukkSkannar()">Avbryt</button>
+          </div>
+        </div>`;
+      try {
+        skannStraum = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      } catch (e) {
+        document.getElementById("skannMelding").innerHTML =
+          `<span class="feil">Fekk ikkje opne kameraet.</span> Gi sida lov til å bruke kameraet, eller skann med kamera-appen.`;
+        return;
+      }
+      const video = document.getElementById("skannVideo");
+      video.srcObject = skannStraum;
+      await video.play();
+      skannAktiv = true;
+      startLesing();
+    }
+
+    // Les bilete frå kameraet til ein QR-kode blir funnen
+    function startLesing() {
+      const video = document.getElementById("skannVideo");
+      if (!video || !skannAktiv) return;
+      const lerret = document.createElement("canvas");
+      const ctx = lerret.getContext("2d", { willReadFrequently: true });
+      const les = () => {
+        if (!skannAktiv) return;
+        if (video.readyState >= 2 && video.videoWidth) {
+          lerret.width = video.videoWidth;
+          lerret.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const bilete = ctx.getImageData(0, 0, lerret.width, lerret.height);
+          const kode = window.jsQR && jsQR(bilete.data, bilete.width, bilete.height, { inversionAttempts: "dontInvert" });
+          if (kode && kode.data) return handterSkann(kode.data);
+        }
+        requestAnimationFrame(les);
+      };
+      requestAnimationFrame(les);
+    }
+
+    function lukkSkannar() {
+      skannAktiv = false;
+      if (skannStraum) skannStraum.getTracks().forEach(t => t.stop());
+      skannStraum = null;
+      document.getElementById("skannar").innerHTML = "";
+    }
+
+    // Godtek berre våre eigne kodar: leiar.html?post=… eller ?kopla=…
+    async function handterSkann(tekst) {
+      let url;
+      try { url = new URL(tekst); } catch (e) { url = null; }
+      const post = url && url.pathname.endsWith("leiar.html") ? url.searchParams.get("post") : null;
+      const bind = url && url.pathname.endsWith("leiar.html") ? url.searchParams.get("kopla") : null;
+      if (!post && !bind) {
+        document.getElementById("skannMelding").innerHTML = `<span class="feil">Det er ikkje ein MC Quiz-kode.</span> Prøv igjen.`;
+        setTimeout(() => {
+          if (!skannAktiv) return;
+          document.getElementById("skannMelding").textContent = "Hald koden inne i ramma.";
+          startLesing();
+        }, 1500);
+        return;
+      }
+      lukkSkannar();
+      try {
+        if (bind) return await kopla(bind);
+        postKode = post;
+        history.replaceState(null, "", "leiar.html?post=" + encodeURIComponent(post));
+        await opnePost(false);
+      } catch (e) {
+        console.error(e);
+        vis(`<div class="kort"><p class="feil">Fekk ikkje kontakt. Sjekk dekninga og prøv igjen.</p>
+             <button class="stor" onclick="opneSkannar()">📷 Skann på nytt</button></div>`);
+      }
+    }
+
 
     function ikkjeLeiar() {
       vis(`
@@ -109,7 +205,8 @@
           return ikkjeLeiar();
 
         case "unknown_code":
-          return vis(`<div class="kort"><p class="feil">Ukjend QR-kode.</p></div>`);
+          return vis(`<div class="kort"><p class="feil">Ukjend QR-kode.</p>
+            <button class="stor" onclick="opneSkannar()">📷 Skann på nytt</button></div>`);
 
         case "already_finished":
         case "finished":
