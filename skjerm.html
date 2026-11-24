@@ -57,6 +57,7 @@
     .gk .namn { font-size: 1.25vw; margin: .4vw 0; line-height: 1.3; }
     .gk .status { font-size: 1vw; }
     .gk.innsjekk { border-color: #e53935; }
+    .gk .leiar { font-size: 1.1vw; color: var(--oransje); margin: -.1vw 0 .4vw; }
     .gk.innsjekk .gnamn { color: #ff6b5e; }
 
     @media (max-width: 800px) {
@@ -65,7 +66,7 @@
       .klokke { font-size: 18vw; }
       .tavle table { font-size: 16px; }
       .rutenett { grid-template-columns: 1fr; }
-      .gk .gnamn, .gk .tid { font-size: 20px; } .gk .namn { font-size: 16px; } .gk .status { font-size: 14px; }
+      .gk .gnamn, .gk .tid { font-size: 20px; } .gk .namn { font-size: 16px; } .gk .status, .gk .leiar { font-size: 14px; }
       .gruppekort .gnamn { font-size: 24px; } .gruppekort .namn { font-size: 17px; } .gruppekort .nedtelling { font-size: 32px; }
       .gruppekort .etikett { font-size: 13px; } .inne-topp .neste-linje { font-size: 18px; }
     }
@@ -222,6 +223,7 @@
             <span class="tid tal">${klokkeslett(g.start_at)}</span>
           </div>
           <div class="namn">${namnliste(g)}</div>
+          ${g.leader ? `<div class="leiar">Leiar: <b>${esc(g.leader)}</b></div>` : ""}
           <div class="status">${statusMerke(g, t)} ${g.start_at && new Date(g.start_at) <= t ? `<span class="dempa">${g.points} poeng</span>` : ""}</div>
         </div>`).join("");
     }
