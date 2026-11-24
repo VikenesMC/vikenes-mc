@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vikenes MC – Medlem</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
+  <link rel="stylesheet" href="stil.css">
+  <style>
+    .topp h1 { font-size: 30px; }
+    .meg { font-size: 15px; }
+    .faner2 { display: flex; gap: 6px; margin-bottom: 16px; }
+    .faner2 button { flex: 1; margin-top: 0; background: #333; color: #fff; }
+    .faner2 button.aktiv { background: var(--oransje); color: #000; }
+    .medlem { padding: 12px 0; border-bottom: 1px solid var(--linje); }
+    .medlem:last-child { border-bottom: 0; }
+    .medlem .namn { font-weight: bold; }
+    .medlem .rolle { color: var(--oransje); font-size: 15px; }
+    .medlem .info { color: var(--dempa); font-size: 15px; }
+    .medlem select { width: auto; padding: 8px; margin-top: 8px; font-size: 15px; }
+    .medlem .rad button { margin-top: 8px; }
+    .kjem { color: var(--dempa); font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topp">
+      <img class="logo" src="logo.png" alt="Vikenes MC">
+      <h1 class="fraktur">Vikenes MC</h1>
+    </div>
+
+    <div id="innhald"><p class="dempa">Lastar …</p></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script>window.AUTH_LAGER = "vmc-medlem";</script>
+  <script src="felles.js"></script>
+  <script>
+    let meg = null;          // medlem_me()
+    let liste = [];          // member_list()
+    let roller = [];
+    let aktivFane = "heim";
+    let innloggingsFane = "inn";
+
+    const vis = html => document.getElementById("innhald").innerHTML = html;
+
+    function normTlf(t) {
+      let d = (t || "").replace(/[\s\-+]/g, "");
+      if (/^0047\d{8}$/.test(d)) d = d.slice(4);
+      else if (/^47\d{8}$/.test(d) && t.trim().startsWith("+")) d = d.slice(2);
+      return d;
+    }
+
+    function visTlf(t) {
+      return t && t.length === 8 ? t.slice(0, 3) + " " + t.slice(3, 5) + " " + t.slice(5) : (t || "");
+    }
+
+    // ---------------- Kva skal visast ----------------
+    async function start() {
+      const { data } = await db.auth.getSession();
+      if (!data.session) return visInnlogging();
+      try {
+        meg = await rpc("member_me");
+      } catch (e) {
+        return vis(`<div class="kort"><p class="feil">Noko gjekk gale: ${esc(e.message)}</p>
+          <button onclick="start()">Prøv igjen</button></div>`);
+      }
+      if (!meg) return visFullfor();
+      if (meg.status === "pending") return visVentar();
+      if (meg.status === "removed") return visFjerna();
+      if (!roller.length) roller = await rpc("member_roles");
+      visApp();
+    }
+
+    // ---------------- Innlogging / ny konto ----------------
+    function visInnlogging(melding) {
+      const inn = innloggingsFane === "inn";
+      vis(`
+        <div class="faner2">
+          <button class="${inn ? "aktiv" : ""}" onclick="innloggingsFane='inn'; visInnlogging()">Logg inn</button>
+          <button class="${inn ? "" : "aktiv"}" onclick="innloggingsFane='ny'; visInnlogging()">Ny medlem</button>
+        </div>
+        <div class="kort">
+          ${inn ? `
+            <label for="epost">E-post</label>
+            <input id="epost" type="email" autocomplete="username">
+            <label for="passord">Passord</label>
+            <input id="passord" type="password" autocomplete="current-password">
+            <button class="stor" onclick="loggInn()">Logg inn</button>
+          ` : `
+            <p class="dempa" style="margin-top:0">Lag konto her. Du kjem inn når President eller
+              Vice President har godkjent deg.</p>
+            <label for="namn">Fullt namn</label>
+            <input id="namn" autocomplete="name">
+            <label for="tlf">Mobilnummer</label>
+            <input id="tlf" type="tel" inputmode="numeric" autocomplete="tel" placeholder="8 siffer, t.d. 912 34 567">
+            <label for="epost">E-post</label>
+            <input id="epost" type="email" autocomplete="username">
+            <label for="passord">Vel eit passord (minst 8 teikn)</label>
+            <input id="passord" type="password" autocomplete="new-password">
+            <button class="stor" onclick="nyKonto()">Lag konto</button>
+          `}
+          <p id="melding" class="feil">${esc(melding || "")}</p>
+        </div>`);
+    }
+
+    function feil(t) { document.getElementById("melding").textContent = t; }
+
+    async function loggInn() {
+      const email = document.getElementById("epost").value.trim();
+      const password = document.getElementById("passord").value;
+      if (!email || !password) return feil("Skriv inn e-post og passord.");
+      const { error } = await db.auth.signInWithPassword({ email, password });
+      if (error) return feil("Feil e-post eller passord.");
+      start();
+    }
+
+    async function nyKonto() {
+      const namn = document.getElementById("namn").value.trim();
+      const tlf = normTlf(document.getElementById("tlf").value);
+      const email = document.getElementById("epost").value.trim();
+      const password = document.getElementById("passord").value;
+      if (namn.length < 2) return feil("Skriv inn namnet ditt.");
+      if (!/^\d{8}$/.test(tlf)) return feil("Mobilnummeret må vere 8 siffer.");
+      if (!/^\S+@\S+\.\S+$/.test(email)) return feil("Sjekk e-postadressa.");
+      if (password.length < 8) return feil("Passordet må vere minst 8 teikn.");
+
+      const { data, error } = await db.auth.signUp({ email, password });
+      if (error) {
+        if (/registered|exists/i.test(error.message)) return feil("Denne e-posten har alt ein konto. Bruk «Logg inn».");
+        return feil("Kunne ikkje lage konto: " + error.message);
+      }
+      if (!data.session) {
+        return feil("Kontoen er laga, men må stadfestast før du kan logge inn. Sei frå til President.");
+      }
+      await registrer(namn, tlf);
+    }
+
+    async function registrer(namn, tlf) {
+      let svar;
+      try { svar = await rpc("member_register", { p_name: namn, p_phone: tlf }); }
+      catch (e) { return feil("Noko gjekk gale: " + e.message); }
+      if (svar.status === "bad_name") return feil("Skriv inn namnet ditt.");
+      if (svar.status === "bad_phone") return feil("Mobilnummeret må vere 8 siffer.");
+      if (svar.status === "phone_exists") return feil("Dette mobilnummeret er alt registrert på ein annan konto.");
+      start();
+    }
+
+    // Innlogga, men ikkje i registeret (t.d. registreringa vart avbroten)
+    function visFullfor() {
+      vis(`
+        <div class="kort">
+          <h2 style="margin-top:0">Fullfør registreringa</h2>
+          <label for="namn">Fullt namn</label>
+          <input id="namn" autocomplete="name">
+          <label for="tlf">Mobilnummer</label>
+          <input id="tlf" type="tel" inputmode="numeric" autocomplete="tel" placeholder="8 siffer, t.d. 912 34 567">
+          <button class="stor" onclick="fullfor()">Send</button>
+          <p id="melding" class="feil"></p>
+          <button class="sekundar" onclick="loggUt()">Logg ut</button>
+        </div>`);
+    }
+
+    function fullfor() {
+      const namn = document.getElementById("namn").value.trim();
+      const tlf = normTlf(document.getElementById("tlf").value);
+      if (namn.length < 2) return feil("Skriv inn namnet ditt.");
+      if (!/^\d{8}$/.test(tlf)) return feil("Mobilnummeret må vere 8 siffer.");
+      registrer(namn, tlf);
+    }
+
+    function visVentar() {
+      vis(`
+        <div class="kort">
+          <h2 style="margin-top:0">Takk, ${esc(meg.name)}!</h2>
+          <p>Du ventar på godkjenning frå <b>President</b> eller <b>Vice President</b>.</p>
+          <p class="dempa">Når du er godkjend, kjem du rett inn her.</p>
+          <button onclick="start()">Sjekk igjen</button>
+          <button class="sekundar" onclick="loggUt()">Logg ut</button>
+        </div>`);
+    }
+
+    function visFjerna() {
+      vis(`
+        <div class="kort">
+          <p>Du har ikkje tilgang til medlemssida.</p>
+          <p class="dempa">Ta kontakt med President om du meiner dette er feil.</p>
+          <button class="sekundar" onclick="loggUt()">Logg ut</button>
+        </div>`);
+    }
+
+    async function loggUt() {
+      await db.auth.signOut();
+      meg = null;
+      innloggingsFane = "inn";
+      visInnlogging();
+    }
+
+    // ---------------- Medlemssida ----------------
+    async function visApp() {
+      vis(`
+        <div class="rad" style="justify-content:space-between; margin-bottom:12px">
+          <div class="meg"><b>${esc(meg.name)}</b> · <span style="color:var(--oransje)">${esc(meg.role)}</span></div>
+          <button class="sekundar liten" onclick="loggUt()">Logg ut</button>
+        </div>
+        <div class="faner2">
+          <button data-fane="heim" onclick="visFane('heim')">Heim</button>
+          <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
+        </div>
+        <div id="fane"></div>`);
+      visFane(aktivFane);
+    }
+
+    async function visFane(f) {
+      aktivFane = f;
+      document.querySelectorAll(".faner2 button").forEach(b =>
+        b.classList.toggle("aktiv", b.dataset.fane === f));
+      if (f === "heim") return visHeim();
+      try { liste = await rpc("member_list"); }
+      catch (e) { return start(); }
+      visMedlemmer();
+    }
+
+    function visHeim() {
+      const ventande = liste.filter(m => m.status === "pending").length;
+      document.getElementById("fane").innerHTML = `
+        ${meg.leader && ventande ? `
+          <div class="kort" style="border-top-color:var(--gul)">
+            <p class="vars" style="margin:0">${ventande} ventar på godkjenning</p>
+            <button onclick="visFane('medlemmer')">Sjå medlemmer</button>
+          </div>` : ""}
+        <div class="kort">
+          <h2 style="margin-top:0">Velkomen, ${esc(meg.name.split(" ")[0])}!</h2>
+          <p class="kjem">Her kjem etter kvart:</p>
+          <p class="kjem">💬 Chat med varsel<br>📅 Kalender<br>📄 Dokument</p>
+        </div>`;
+      // Hent lista i bakgrunnen så leiarane ser ventande på heimesida
+      if (meg.leader && !liste.length) {
+        rpc("member_list").then(l => { liste = l; if (aktivFane === "heim" && l.some(m => m.status === "pending")) visHeim(); }).catch(() => {});
+      }
+    }
+
+    function rolleVal(id, valt) {
+      return `<select id="rolle-${id}">${roller.map(r =>
+        `<option value="${esc(r)}" ${r === valt ? "selected" : ""}>${esc(r)}</option>`).join("")}</select>`;
+    }
+
+    function medlemRad(m) {
+      const megSjolv = m.id === meg.id;
+      let knappar = "";
+      if (meg.leader && !megSjolv) {
+        if (m.status === "pending") {
+          knappar = `<div class="rad">${rolleVal(m.id, m.role)}
+            <button onclick="sett('${m.id}', 'approved')">Godkjenn</button>
+            <button class="sekundar" onclick="sett('${m.id}', 'removed', 'Avvise')">Avvis</button></div>`;
+        } else if (m.status === "approved") {
+          knappar = `<div class="rad">${rolleVal(m.id, m.role)}
+            <button class="sekundar" onclick="sett('${m.id}', 'approved')">Lagre rolle</button>
+            <button class="fare" onclick="sett('${m.id}', 'removed', 'Fjerne')">Fjern</button></div>`;
+        } else {
+          knappar = `<div class="rad">${rolleVal(m.id, m.role)}
+            <button class="sekundar" onclick="sett('${m.id}', 'approved')">Gje tilgang att</button></div>`;
+        }
+      }
+      return `<div class="medlem">
+        <div class="namn">${esc(m.name)}${megSjolv ? ' <span class="dempa">(deg)</span>' : ""}</div>
+        <div class="rolle">${esc(m.role)}</div>
+        <div class="info">${m.phone ? `<a href="tel:${esc(m.phone)}">${esc(visTlf(m.phone))}</a>` : ""}
+          ${m.email ? " · " + esc(m.email) : ""}</div>
+        ${knappar}
+      </div>`;
+    }
+
+    function visMedlemmer() {
+      const ventande = liste.filter(m => m.status === "pending");
+      const godkjende = liste.filter(m => m.status === "approved");
+      const fjerna = liste.filter(m => m.status === "removed");
+      document.getElementById("fane").innerHTML = `
+        ${ventande.length ? `<div class="kort" style="border-top-color:var(--gul)">
+          <h2 style="margin-top:0">Ventar på godkjenning</h2>
+          <p class="dempa" style="margin-top:0">Vel rolle og trykk «Godkjenn».</p>
+          ${ventande.map(medlemRad).join("")}</div>` : ""}
+        <div class="kort">
+          <h2 style="margin-top:0">Medlemmer (${godkjende.length})</h2>
+          ${godkjende.map(medlemRad).join("") || '<p class="dempa">Ingen enno.</p>'}
+          ${meg.leader ? '<p class="dempa" style="font-size:14px">Berre President og Vice President kan endre roller. Du kan ikkje endre deg sjølv.</p>' : ""}
+        </div>
+        ${fjerna.length ? `<div class="kort" style="border-top-color:#555">
+          <h2 style="margin-top:0">Utan tilgang</h2>
+          ${fjerna.map(medlemRad).join("")}</div>` : ""}`;
+    }
+
+    async function sett(id, status, verb) {
+      const m = liste.find(x => x.id === id);
+      if (verb && !confirm(verb + " " + (m ? m.name : "") + "?")) return;
+      const rolle = document.getElementById("rolle-" + id).value;
+      try {
+        await rpc("member_set", { p_id: id, p_role: rolle, p_status: status });
+      } catch (e) {
+        const t = { not_allowed: "Berre President og Vice President kan gjere dette.",
+                    not_self: "Du kan ikkje endre deg sjølv." }[e.message] || e.message;
+        alert(t);
+      }
+      visFane("medlemmer");
+    }
+
+    start();
+  </script>
+</body>
+</html>

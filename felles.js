@@ -4,7 +4,10 @@
 const SUPABASE_URL = "https://yrozxcxjqxfwbbdwlwwi.supabase.co";
 const SUPABASE_KEY = "sb_publishable_eb4NTorneozNeCZU7GnGFQ_ybS53nn5";
 
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Medlemssida set window.AUTH_LAGER, så medlemsinnlogginga ikkje blandar
+// seg med admin-innlogginga til quizen på same PC/mobil.
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY,
+  window.AUTH_LAGER ? { auth: { storageKey: window.AUTH_LAGER } } : undefined);
 
 // Mappa der sidene ligg (brukast til QR-lenkjer)
 const BASE_URL = new URL(".", location.href).href;
