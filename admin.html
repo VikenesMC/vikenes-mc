@@ -569,12 +569,12 @@
       }
     }
 
+    // Begge nullstillingane krev PIN (slettar svar og poeng)
     function nullstill(slettGrupper) {
-      if (slettGrupper) {
-        return visPin("Slett gruppene", "Skriv PIN for å slette gruppene og starte på nytt.",
-                      () => { visFane("start"); nullstillUtfor(true); }, "start");
-      }
-      nullstillUtfor(false);
+      visPin(slettGrupper ? "Slett gruppene" : "Nullstill framdrift",
+             slettGrupper ? "Skriv PIN for å slette gruppene og starte på nytt."
+                          : "Skriv PIN for å slette alle svar og poeng.",
+             () => { visFane("start"); nullstillUtfor(slettGrupper); }, "start");
     }
 
     async function nullstillUtfor(slettGrupper) {
