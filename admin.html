@@ -157,10 +157,14 @@
     // ---------------- Deltakarar ----------------
     function faneDeltakarar() {
       const betalte = D.deltakarar.filter(p => p.paid).length;
+      // Berre grupper som ikkje har køyrt ut enno (pluss gruppa personen alt er i)
+      const na = new Date();
+      const ikkjeStarta = g => !g.finished_at && (!g.start_at || new Date(g.start_at) > na);
       const gruppeValg = (p) => `
         <select onchange="flyttDeltakar(${p.id}, this.value)" style="width:auto; padding:6px">
           <option value="">– ingen –</option>
-          ${D.grupper.map(g => `<option value="${g.id}" ${p.group_id === g.id ? "selected" : ""}>${esc(g.name)}</option>`).join("")}
+          ${D.grupper.filter(g => g.id === p.group_id || ikkjeStarta(g)).map(g =>
+            `<option value="${g.id}" ${p.group_id === g.id ? "selected" : ""}>${esc(g.name)}${ikkjeStarta(g) ? ` (kl. ${klokkeslett(g.start_at)})` : " (ute)"}</option>`).join("")}
         </select>`;
 
       return `
