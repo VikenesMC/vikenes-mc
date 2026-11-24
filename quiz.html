@@ -18,9 +18,9 @@
       <input id="name" type="text" autocomplete="name" placeholder="Skriv namnet ditt">
 
       <label for="phone">Telefonnummer</label>
-      <input id="phone" type="tel" autocomplete="tel" placeholder="Telefonnummer">
+      <input id="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="8 siffer, t.d. 912 34 567">
 
-      <button class="stor" id="meldPaa" onclick="registrer()">Meld meg på</button>
+      <button class="stor" id="meldPaa" onclick="registrer(false)">Meld meg på</button>
       <p id="melding" class="feil"></p>
     </div>
 
@@ -35,21 +35,52 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
   <script src="felles.js"></script>
   <script>
-    async function registrer() {
+    // Norsk mobilnummer: 8 siffer (+47 / 0047 framfor er greitt, mellomrom òg)
+    function normTlf(t) {
+      let d = t.replace(/[\s\-+]/g, "");
+      if (/^0047\d{8}$/.test(d)) d = d.slice(4);
+      else if (/^47\d{8}$/.test(d) && t.trim().startsWith("+")) d = d.slice(2);
+      return d;
+    }
+
+    async function registrer(sameNamnOk) {
       const namn = document.getElementById("name").value.trim();
       const tlf = document.getElementById("phone").value.trim();
       const melding = document.getElementById("melding");
       melding.textContent = "";
 
-      if (namn.length < 2 || tlf.replace(/\D/g, "").length < 8) {
-        melding.textContent = "Fyll inn namn og telefonnummer (minst 8 siffer).";
+      if (namn.length < 2) {
+        melding.textContent = "Skriv namnet ditt.";
+        return;
+      }
+      if (!/^\d{8}$/.test(normTlf(tlf))) {
+        melding.textContent = "Telefonnummeret må vere 8 siffer, berre tal.";
         return;
       }
 
       const knapp = document.getElementById("meldPaa");
       knapp.disabled = true;
       try {
-        await rpc("register_participant", { p_name: namn, p_phone: tlf });
+        const svar = await rpc("register_participant", { p_name: namn, p_phone: tlf, p_same_name_ok: !!sameNamnOk });
+        if (svar.status === "bad_phone") {
+          melding.textContent = "Telefonnummeret må vere 8 siffer, berre tal.";
+          return;
+        }
+        if (svar.status === "bad_name") {
+          melding.textContent = "Skriv namnet ditt.";
+          return;
+        }
+        if (svar.status === "phone_exists") {
+          melding.textContent = "Dette telefonnummeret er alt påmeldt. Du treng ikkje melde deg på igjen. Er det feil, snakk med arrangøren.";
+          return;
+        }
+        if (svar.status === "name_exists") {
+          if (confirm(`Det er alt nokon påmeld med namnet «${namn}».\n\nEr du ein annan person? Trykk OK for å melde deg på likevel.`)) {
+            return registrer(true);
+          }
+          melding.textContent = "Du er truleg alt påmeld. Snakk med arrangøren om du er i tvil.";
+          return;
+        }
         document.getElementById("skjema").style.display = "none";
         document.getElementById("takk").style.display = "block";
       } catch (e) {

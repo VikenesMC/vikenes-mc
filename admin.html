@@ -247,9 +247,24 @@
     }
 
     async function leggTilDeltakar() {
-      const namn = document.getElementById("nyNamn").value.trim();
-      const tlf = document.getElementById("nyTlf").value.trim();
-      if (!namn) return;
+      const namn = document.getElementById("nyNamn").value.trim().replace(/\s+/g, " ");
+      const tlfInn = document.getElementById("nyTlf").value.trim();
+      if (namn.length < 2) return alert("Skriv namnet.");
+      // Telefon: 8 siffer (+47 er greitt). Kan stå tomt for dei som ikkje har mobil.
+      // Same regel som i databasen (_norm_tlf)
+      const normTlf = t => {
+        const s = String(t || "").trim();
+        let d = s.replace(/[\s\-+]/g, "");
+        if (/^0047\d{8}$/.test(d)) d = d.slice(4);
+        else if (/^47\d{8}$/.test(d) && s.startsWith("+")) d = d.slice(2);
+        return d;
+      };
+      const tlf = normTlf(tlfInn);
+      if (tlf && !/^\d{8}$/.test(tlf)) return alert("Telefonnummeret må vere 8 siffer, berre tal (eller tomt).");
+      const sameTlf = tlf && D.deltakarar.find(p => normTlf(p.phone) === tlf);
+      if (sameTlf) return alert(`Telefonnummeret er alt påmeldt (${sameTlf.name}).`);
+      const sameNamn = D.deltakarar.find(p => p.name.trim().toLowerCase() === namn.toLowerCase());
+      if (sameNamn && !confirm(`Det er alt nokon som heiter «${sameNamn.name}». Er det ein annan person?`)) return;
       if (await lagreDb(db.from("participants").insert({ name: namn, phone: tlf, event_id: D.eventId, paid: false }))) oppdater();
     }
 
