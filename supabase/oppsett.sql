@@ -898,5 +898,39 @@ begin
 end $$;
 grant execute on function public.screen_data() to anon, authenticated;
 
+-- =====================================================================
+-- Tillegg 2026-11-24 (3): leiaren (kortnamn) på skjermen
+-- =====================================================================
+create or replace function public.screen_data()
+returns json language plpgsql stable security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_total int;
+begin
+  select count(*) into v_total from public._route_stops(v_event);
+  return json_build_object(
+    'now', now(),
+    'stops_total', v_total,
+    'not_checked_in', coalesce((select json_agg(public._kort_namn(p.name) order by p.name)
+                                  from public.participants p where p.event_id = v_event and not p.paid), '[]'::json),
+    'groups', coalesce((
+      select json_agg(json_build_object(
+               'name', g.name,
+               'position', g.position,
+               'start_at', g.start_at,
+               'finished', g.finished_at is not null,
+               'points', public._group_points(g.id),
+               'stops_handled', (select count(*) from public.group_stops gs where gs.group_id = g.id),
+               'leader', (select public._kort_namn(l.name) from public.participants l where l.id = g.leader_participant_id),
+               'members', coalesce((select json_agg(public._kort_namn(p.name) order by p.name)
+                                      from public.participants p where p.group_id = g.id), '[]'::json)
+             ) order by g.position)
+        from public.groups g
+       where g.event_id = v_event
+    ), '[]'::json)
+  );
+end $$;
+grant execute on function public.screen_data() to anon, authenticated;
+
 -- Admin-brukaren: legg inn e-posten i ein eigen, separat kommando (ikkje i denne fila):
 --   insert into public.admins (email) values ('<klubben sin e-post>') on conflict do nothing;
