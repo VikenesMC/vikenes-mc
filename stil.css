@@ -40,8 +40,8 @@ a { color: var(--tekst); }
 
 h1 { margin: 10px 0 20px; }
 
-/* Klubbprofil: gotisk skrift som i merket (berre overskrifter – brødtekst skal vere lett å lese) */
-.fraktur, h1 {
+/* Gotisk skrift berre for det som har med klubben å gjere (ikkje alle les gotisk) */
+.fraktur {
   font-family: "UnifrakturCook", "Old English Text MT", serif;
   font-weight: 700;
   letter-spacing: .5px;
