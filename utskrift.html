@@ -4,11 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC Quiz – QR-kodar</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
   <style>
+    /* Kvitt ark, svart QR. Oransje stripe med vinge-logoen øvst (logoen uendra).
+       Gotisk berre i logoen (klubben) – stadnamn og forklaring i vanleg skrift. */
     body { font-family: Arial, sans-serif; margin: 0; background: #ddd; color: #111; }
-    .side .logo { width: 45mm; display: block; margin: 0 auto 4mm; }
-    .side h1, .side h2 { font-family: "UnifrakturCook", "Old English Text MT", serif; }
+    .stripe {
+      margin: -20mm -20mm 10mm; padding: 6mm 0;
+      background: linear-gradient(to bottom, transparent 0, transparent 41%, #FC8D00 41%, #FC8D00 63%, transparent 63%);
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .stripe img { display: block; margin: 0 auto; width: 150mm; height: auto; }
     .verktoy { padding: 16px; background: #111; color: #fff; }
     .verktoy button { padding: 10px 16px; font-size: 16px; font-weight: bold; }
     .side {
@@ -19,9 +24,8 @@
       text-align: center;
       page-break-after: always;
     }
-    .side h1 { font-size: 40px; margin: 0 0 6mm; }
-    .side h2 { font-size: 64px; margin: 0 0 8mm; }
-    .side .qr img, .side .qr canvas { width: 105mm !important; height: 105mm !important; }
+    .side h1 { font-size: 26px; margin: 0 0 3mm; text-transform: uppercase; letter-spacing: 3px; color: #555; }
+    .side h2 { font-size: 56px; margin: 0 0 8mm; }
     .side .qr { display: inline-block; padding: 6mm; border: 2px solid #111; }
     .side .qr img, .side .qr canvas { width: 120mm !important; height: 120mm !important; }
     .side p { font-size: 22px; }
@@ -67,7 +71,7 @@
       sider.forEach((s, i) => {
         const div = document.createElement("div");
         div.className = "side";
-        div.innerHTML = `<img class="logo" src="logo.png" alt=""><h1>${esc(s.overskrift)}</h1><h2>${esc(s.namn)}</h2>
+        div.innerHTML = `<div class="stripe"><img src="vinge-logo.png" alt="Vikenes MC"></div><h1>${esc(s.overskrift)}</h1><h2>${esc(s.namn)}</h2>
           <div class="qr" id="qr${i}"></div><p>${esc(s.tekst)}</p>`;
         boks.appendChild(div);
         new QRCode(document.getElementById("qr" + i), { text: s.url, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
