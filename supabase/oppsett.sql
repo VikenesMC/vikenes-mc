@@ -1102,5 +1102,30 @@ begin
 end $$;
 grant execute on function public.register_participant(text, text, boolean) to anon, authenticated;
 
+-- =====================================================================
+-- Tillegg 2026-11-24 (6): slett alle påmelde (berre admin)
+--   Slettar òg gruppene (og dermed svar/postbesøk) – grupper utan folk gir inga meining.
+--   Postar, spørsmål og ruter blir verande.
+-- =====================================================================
+create or replace function public.delete_all_participants()
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_event bigint := public.current_event_id();
+  v_p int;
+  v_g int;
+begin
+  if not public.is_admin() then
+    raise exception 'Berre admin';
+  end if;
+  select count(*) into v_p from public.participants where event_id = v_event;
+  select count(*) into v_g from public.groups where event_id = v_event;
+  update public.participants set group_id = null where event_id = v_event;
+  delete from public.groups where event_id = v_event;
+  delete from public.participants where event_id = v_event;
+  return json_build_object('participants', v_p, 'groups', v_g);
+end $$;
+revoke all on function public.delete_all_participants() from public, anon;
+grant execute on function public.delete_all_participants() to authenticated;
+
 -- Admin-brukaren: legg inn e-posten i ein eigen, separat kommando (ikkje i denne fila):
 --   insert into public.admins (email) values ('<klubben sin e-post>') on conflict do nothing;
