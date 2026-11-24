@@ -149,6 +149,8 @@
       const t = na();
       document.getElementById("klokke").textContent = klokke(t);
       if (!data) return;
+      sjekkUteModus();
+      if (uteModus === "resultat") return;
       const v = ventande(t);
       const el = document.getElementById("grupper");
 
@@ -182,6 +184,11 @@
     }
 
     function tavle() {
+      sjekkUteModus();
+      if (uteModus === "resultat") {
+        document.getElementById("uteResultat").innerHTML = resultatHtml();
+        return;
+      }
       const t = na();
       const grupper = [...data.groups].sort((a, b) => b.points - a.points || a.position - b.position);
       let plass = 0, forrige = null;
@@ -241,14 +248,39 @@
 
     // Når siste gruppe er i mål: vis 1., 2. og 3. plass tydeleg
     function resultatInne() {
+      document.getElementById("rutenett").className = "";
+      document.getElementById("rutenett").innerHTML = resultatHtml();
+    }
+
+    // UTE: same resultat, med klokka over. Byter tilbake om løpet blir nullstilt.
+    let uteModus = "ute";
+    function sjekkUteModus() {
+      const vil = alleIMaal() ? "resultat" : "ute";
+      if (vil === uteModus) return;
+      uteModus = vil;
+      if (vil === "resultat") {
+        document.getElementById("visning").innerHTML = `
+          <div class="inne">
+            <div class="inne-topp">
+              <div class="klokke tal" id="klokke">--:--:--</div>
+              <div class="neste-linje"><span class="ok">Alle gruppene er i mål! 🏁</span></div>
+            </div>
+            <div id="uteResultat"></div>
+          </div>`;
+        document.getElementById("uteResultat").innerHTML = resultatHtml();
+      } else {
+        byggUte();
+      }
+    }
+
+    function resultatHtml() {
       const p = plasseringar();
       const pall = p.filter(x => x.plass <= 3);
       // Klassisk pall: 2 – 1 – 3 (likt på same plass står ved sida av kvarandre)
       const rekkje = [...pall.filter(x => x.plass === 2), ...pall.filter(x => x.plass === 1), ...pall.filter(x => x.plass === 3)];
       const medalje = { 1: "🥇", 2: "🥈", 3: "🥉" };
       const resten = p.filter(x => x.plass > 3);
-      document.getElementById("rutenett").className = "";
-      document.getElementById("rutenett").innerHTML = `
+      return `
         <div class="resultat">
           <h2>Resultat</h2>
           <div class="pall">
