@@ -132,10 +132,13 @@
     }
 
     // ---------------- Faner ----------------
-    // PIN før Postar (der fasiten står), så ingen kan titte ved betalingsbordet.
-    // Låser seg igjen når ein går til ei anna fane. Berre hash av PIN-en ligg i koden.
+    // PIN før Postar (fasit), Ruter og «Slett gruppene og start på nytt», så
+    // ingen kan titte eller rote til noko ved betalingsbordet.
+    // Fanene låser seg igjen når ein går til ei anna fane. Berre hash av PIN-en ligg i koden.
     const PIN_HASH = "9f6406e2585f1e104cfa1740e79265f2ee9d6829d31f6e4b1be163ebcbdfe9b6";
-    let postarOpne = false;
+    const LAASTE_FANER = { postar: "Postar og fasit", ruter: "Ruter" };
+    let openFane = null;      // fana som er låst opp no
+    let etterPin = null;      // kva som skal skje når PIN er rett
 
     async function sjekkPin() {
       const felt = document.getElementById("pinFelt");
@@ -143,35 +146,38 @@
       const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", data))]
         .map(b => b.toString(16).padStart(2, "0")).join("");
       if (hash === PIN_HASH) {
-        postarOpne = true;
-        visFane("postar");
+        const handling = etterPin;
+        etterPin = null;
+        handling();
       } else {
         felt.value = "";
         document.getElementById("pinFeil").textContent = "Feil PIN";
       }
     }
 
-    function pinSkjema() {
-      return `
+    function visPin(tittel, tekst, handling, avbrytFane) {
+      etterPin = handling;
+      clearInterval(oppdateringsTimer);
+      document.getElementById("fane").innerHTML = `
         <div class="kort" style="max-width:320px; margin:30px auto; text-align:center">
-          <p class="stor-tekst">🔒 Postar og fasit</p>
-          <p class="dempa">Skriv PIN for å sjå spørsmål og svar.</p>
+          <p class="stor-tekst">🔒 ${esc(tittel)}</p>
+          <p class="dempa">${esc(tekst)}</p>
           <input id="pinFelt" type="password" inputmode="numeric" autocomplete="off" maxlength="8"
                  style="font-size:28px; text-align:center; letter-spacing:8px"
                  onkeydown="if (event.key === 'Enter') sjekkPin()">
           <p id="pinFeil" class="feil"></p>
           <button class="stor" onclick="sjekkPin()">Opne</button>
+          ${avbrytFane ? `<button class="stor sekundar" onclick="visFane('${avbrytFane}')">Avbryt</button>` : ""}
         </div>`;
+      document.getElementById("pinFelt").focus();
     }
 
     function visFane(namn, behaldScroll) {
-      if (namn !== "postar") postarOpne = false;
-      if (namn === "postar" && !postarOpne) {
+      if (namn !== openFane) openFane = null;
+      if (LAASTE_FANER[namn] && openFane !== namn) {
         aktivFane = namn;
         document.querySelectorAll(".fanar button").forEach(b => b.classList.toggle("aktiv", b.dataset.fane === namn));
-        clearInterval(oppdateringsTimer);
-        document.getElementById("fane").innerHTML = pinSkjema();
-        document.getElementById("pinFelt").focus();
+        visPin(LAASTE_FANER[namn], "Skriv PIN for å opne.", () => { openFane = namn; visFane(namn); });
         return;
       }
       aktivFane = namn;
@@ -563,7 +569,15 @@
       }
     }
 
-    async function nullstill(slettGrupper) {
+    function nullstill(slettGrupper) {
+      if (slettGrupper) {
+        return visPin("Slett gruppene", "Skriv PIN for å slette gruppene og starte på nytt.",
+                      () => { visFane("start"); nullstillUtfor(true); }, "start");
+      }
+      nullstillUtfor(false);
+    }
+
+    async function nullstillUtfor(slettGrupper) {
       const tekst = slettGrupper
         ? "Alle svar, poeng og leiarar blir sletta, og gruppene blir fjerna. Deltakarane blir verande, og du kan fordele grupper på nytt.\n\nDette kan ikkje angrast. Halde fram?"
         : "Alle svar, poeng, mål og leiarkoplingar blir sletta. Gruppene og medlemmene blir verande, men alle leiarar må koplast på nytt.\n\nDette kan ikkje angrast. Halde fram?";
