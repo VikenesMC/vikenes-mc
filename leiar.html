@@ -167,7 +167,11 @@
         <div class="kort">
           <p class="dempa">${esc(postNamn)} · spørsmål ${Math.max(1, nr)} av 3</p>
           <p class="stor-tekst">${esc(q.question)}</p>
-          ${q.options.map((alt, i) => `
+          ${q.kind === "number" ? `
+            <p class="dempa">Gjett eit tal. Gruppa som er nærast, får mest poeng.</p>
+            <input id="talsvar" inputmode="decimal" autocomplete="off" placeholder="Skriv talet her"
+                   style="font-size:28px; text-align:center" oninput="talEndra()">
+          ` : q.options.map((alt, i) => `
             <button class="alternativ" id="alt${i + 1}" onclick="vel(${i + 1})">${"ABC"[i]}. ${esc(alt)}</button>
           `).join("")}
           <button class="stor" id="send" onclick="sendSvar()" disabled>Send svar</button>
@@ -183,13 +187,28 @@
       document.getElementById("send").disabled = false;
     }
 
+    // Gjett tal: godta komma og mellomrom («8,5», «1 000»)
+    function lesTal() {
+      const el = document.getElementById("talsvar");
+      if (!el) return null;
+      const t = el.value.trim().replace(/\s/g, "").replace(",", ".");
+      return t !== "" && !isNaN(Number(t)) ? Number(t) : null;
+    }
+
+    function talEndra() {
+      document.getElementById("send").disabled = lesTal() === null;
+    }
+
     async function sendSvar() {
-      if (!valt) return;
+      const q = sporsmal[0];
+      const tal = q.kind === "number" ? lesTal() : null;
+      if (q.kind === "number" ? tal === null : !valt) return;
       const knapp = document.getElementById("send");
       knapp.disabled = true;
-      const q = sporsmal[0];
       try {
-        const svar = await rpc("answer_question", { p_token: token, p_question_id: q.id, p_choice: valt });
+        const svar = await rpc("answer_question", q.kind === "number"
+          ? { p_token: token, p_question_id: q.id, p_number: tal }
+          : { p_token: token, p_question_id: q.id, p_choice: valt });
         if (svar.status === "not_leader") return ikkjeLeiar();
         if (svar.status === "stop_done") {
           history.replaceState(null, "", "leiar.html");

@@ -223,7 +223,9 @@
 
     function postKomplett(postId) {
       const qs = sporsmalFor(postId);
-      return qs.length === 3 && qs.every(q => q.question && q.option_1 && q.option_2 && q.option_3 && q.correct_option);
+      return qs.length === 3 && qs.every(q => q.question && (q.kind === "number"
+        ? q.correct_number != null
+        : (q.option_1 && q.option_2 && q.option_3 && q.correct_option)));
     }
 
     function fanePostar() {
@@ -245,15 +247,28 @@
       const rader = [0, 1, 2].map(i => {
         const q = qs[i] || {};
         const n = `${p.id}_${i}`;
+        const erTal = q.kind === "number";
         return `
           <div style="margin-top:16px; padding-top:12px; border-top:1px solid #333">
-            <b>Spørsmål ${i + 1}</b>
+            <div class="rad" style="justify-content:space-between">
+              <b>Spørsmål ${i + 1}</b>
+              <select id="kind_${n}" style="width:auto; padding:6px" onchange="byttType('${n}', this.value)">
+                <option value="choice" ${erTal ? "" : "selected"}>3 alternativ</option>
+                <option value="number" ${erTal ? "selected" : ""}>Gjett tal</option>
+              </select>
+            </div>
             <input id="q_${n}" value="${esc(q.question)}" placeholder="Spørsmål">
+            <div id="alt_${n}" style="${erTal ? "display:none" : ""}">
             ${[1, 2, 3].map(k => `
               <div class="rad" style="margin-top:6px">
                 <input type="radio" name="rett_${n}" value="${k}" ${q.correct_option === k ? "checked" : ""} style="width:auto" title="Rett svar">
                 <input id="o${k}_${n}" value="${esc(q["option_" + k])}" placeholder="Alternativ ${"ABC"[k - 1]}" style="flex:1">
               </div>`).join("")}
+            </div>
+            <div id="tal_${n}" style="${erTal ? "" : "display:none"}; margin-top:6px">
+              <label>Rett tal <span class="dempa">(nærast vinn: 100, 75, 50, 25 poeng)</span></label>
+              <input id="rt_${n}" inputmode="decimal" value="${q.correct_number != null ? String(q.correct_number).replace(".", ",") : ""}" placeholder="t.d. 23 eller 8,5" style="max-width:200px">
+            </div>
             <input type="hidden" id="qid_${n}" value="${q.id || ""}">
           </div>`;
       }).join("");
@@ -275,6 +290,11 @@
         </div>`;
     }
 
+    function byttType(n, kind) {
+      document.getElementById("alt_" + n).style.display = kind === "number" ? "none" : "";
+      document.getElementById("tal_" + n).style.display = kind === "number" ? "" : "none";
+    }
+
     async function nyPost() {
       const namn = document.getElementById("nyPostNamn").value.trim();
       const adr = document.getElementById("nyPostAdr").value.trim();
@@ -292,17 +312,25 @@
       for (let i = 0; i < 3; i++) {
         const n = `${id}_${i}`;
         const rett = document.querySelector(`input[name="rett_${n}"]:checked`);
+        const kind = document.getElementById("kind_" + n).value;
+        const rtTekst = document.getElementById("rt_" + n).value.trim().replace(/\s/g, "").replace(",", ".");
+        if (kind === "number" && rtTekst !== "" && isNaN(Number(rtTekst))) {
+          alert(`Spørsmål ${i + 1}: «Rett tal» må vere eit tal.`);
+          return;
+        }
         const rad = {
           stop_id: id,
           position: i + 1,
+          kind,
           question: document.getElementById("q_" + n).value.trim(),
           option_1: document.getElementById("o1_" + n).value.trim(),
           option_2: document.getElementById("o2_" + n).value.trim(),
           option_3: document.getElementById("o3_" + n).value.trim(),
           correct_option: rett ? Number(rett.value) : null,
+          correct_number: rtTekst === "" ? null : Number(rtTekst),
         };
         const qid = document.getElementById("qid_" + n).value;
-        const tom = !rad.question && !rad.option_1 && !rad.option_2 && !rad.option_3;
+        const tom = !rad.question && !rad.option_1 && !rad.option_2 && !rad.option_3 && rad.correct_number == null;
         if (qid) {
           if (!(await lagreDb(db.from("questions").update(rad).eq("id", Number(qid))))) return;
         } else if (!tom) {
@@ -561,13 +589,28 @@
     }
 
     // ---------------- Status (live) ----------------
+    // Gjett tal: nærast rett svar 100, så 75, 50, 25, resten 0 (likt avvik = like poeng). Same regel som i databasen.
+    function talPoeng(gruppeId) {
+      const gruppeIder = new Set(D.grupper.map(g => g.id));
+      let sum = 0;
+      D.sporsmal.filter(q => q.kind === "number" && q.correct_number != null).forEach(q => {
+        const svar = D.svar.filter(s => s.question_id === q.id && s.number_value != null && gruppeIder.has(s.group_id));
+        const mitt = svar.find(s => s.group_id === gruppeId);
+        if (!mitt) return;
+        const avvik = s => Math.abs(Number(s.number_value) - Number(q.correct_number));
+        const plass = new Set(svar.map(avvik).filter(a => a < avvik(mitt))).size + 1;
+        sum += [0, 100, 75, 50, 25][plass] || 0;
+      });
+      return sum;
+    }
+
     function faneStatus() {
       const rs = ruteStoppFor(D.ev.active_route_id);
       const na = new Date();
       const rader = D.grupper.map(g => {
         const besok = D.besok.filter(b => b.group_id === g.id);
         const svar = D.svar.filter(s => s.group_id === g.id);
-        const poeng = svar.reduce((s, x) => s + x.points, 0);
+        const poeng = svar.reduce((s, x) => s + x.points, 0) + talPoeng(g.id);
         const hoppa = besok.filter(b => b.status === "skipped").map(b => (D.postar.find(p => p.id === b.stop_id) || {}).name);
         const tider = [...besok.map(b => b.at), ...svar.map(s => s.created_at)].sort();
         const sist = tider[tider.length - 1];
