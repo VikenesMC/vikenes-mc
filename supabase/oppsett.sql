@@ -567,5 +567,193 @@ revoke all on function public.reset_race(boolean) from public, anon;
 grant execute on function public.reset_race(boolean) to authenticated;
 grant execute on function public.screen_data() to anon, authenticated;
 
+-- =====================================================================
+-- Tillegg 2026-11-24: «gjett tal»-spørsmål
+--   kind = 'choice' (3 alternativ) eller 'number' (leiaren skriv eit tal).
+--   Tal-spørsmål: gruppa nærast rett svar får 100, nest nærast 75, så 50, 25,
+--   resten 0. Likt avvik = like poeng. Poenga blir rekna ut kvar gong
+--   (dei kan endre seg til alle gruppene har svart).
+-- =====================================================================
+alter table public.questions add column if not exists kind text not null default 'choice';
+alter table public.questions add column if not exists correct_number numeric;
+alter table public.questions drop constraint if exists questions_kind_check;
+alter table public.questions add constraint questions_kind_check check (kind in ('choice', 'number'));
+
+alter table public.group_answers alter column choice drop not null;
+alter table public.group_answers add column if not exists number_value numeric;
+
+-- Poeng frå tal-spørsmål for ei gruppe
+create or replace function public._number_points(p_group bigint)
+returns int language sql stable security definer set search_path = public as $$
+  select coalesce(sum(case x.plass when 1 then 100 when 2 then 75 when 3 then 50 when 4 then 25 else 0 end), 0)::int
+  from (
+    select ga.group_id,
+           dense_rank() over (partition by ga.question_id order by abs(ga.number_value - q.correct_number)) as plass
+      from public.group_answers ga
+      join public.questions q on q.id = ga.question_id
+      join public.groups g2 on g2.id = ga.group_id
+     where q.kind = 'number' and q.correct_number is not null and ga.number_value is not null
+       and g2.event_id = (select event_id from public.groups where id = p_group)
+  ) x
+  where x.group_id = p_group
+$$;
+
+-- Totalpoeng: alternativ-spørsmål (+100/-50) + tal-spørsmål (nærast vinn)
+create or replace function public._group_points(p_group bigint)
+returns int language sql stable security definer set search_path = public as $$
+  select (coalesce((select sum(points) from public.group_answers where group_id = p_group), 0)
+          + public._number_points(p_group))::int
+$$;
+
+-- open_stop: sender med kind (alternativ berre for 'choice')
+create or replace function public.open_stop(p_token text, p_code text, p_confirm_skip boolean default false)
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  g public.groups;
+  e public.events;
+  s public.stops;
+  v_pos int;
+  v_skipped json;
+  v_missing int;
+  v_questions json;
+begin
+  select * into g from public.groups where leader_token = p_token and p_token is not null;
+  if not found then
+    return json_build_object('status', 'not_leader');
+  end if;
+  select * into e from public.events where id = g.event_id;
+
+  if p_code = e.finish_code then
+    if g.finished_at is not null then
+      return json_build_object('status', 'finished', 'group_name', g.name, 'points', public._group_points(g.id));
+    end if;
+    select json_agg(rs.name order by rs.pos), count(*) into v_skipped, v_missing
+      from public._route_stops(g.event_id) rs
+     where not exists (select 1 from public.group_stops gs where gs.group_id = g.id and gs.stop_id = rs.stop_id);
+    if v_missing > 0 and not p_confirm_skip then
+      return json_build_object('status', 'finish_early', 'skipped', v_skipped);
+    end if;
+    insert into public.group_stops (group_id, stop_id, status)
+    select g.id, rs.stop_id, 'skipped' from public._route_stops(g.event_id) rs
+    on conflict do nothing;
+    update public.groups set finished_at = now() where id = g.id;
+    return json_build_object('status', 'finished', 'group_name', g.name, 'points', public._group_points(g.id));
+  end if;
+
+  select * into s from public.stops where code = p_code and event_id = g.event_id;
+  if not found then
+    return json_build_object('status', 'unknown_code');
+  end if;
+  if g.finished_at is not null then
+    return json_build_object('status', 'already_finished');
+  end if;
+
+  select rs.pos into v_pos from public._route_stops(g.event_id) rs where rs.stop_id = s.id;
+  if v_pos is null then
+    return json_build_object('status', 'not_in_route', 'stop_name', s.name, 'next', public._next_for_group(g.id));
+  end if;
+
+  if exists (select 1 from public.group_stops where group_id = g.id and stop_id = s.id) then
+    return json_build_object('status', 'stop_closed', 'stop_name', s.name, 'next', public._next_for_group(g.id));
+  end if;
+
+  select json_agg(rs.name order by rs.pos), count(*) into v_skipped, v_missing
+    from public._route_stops(g.event_id) rs
+   where rs.pos < v_pos
+     and not exists (select 1 from public.group_stops gs where gs.group_id = g.id and gs.stop_id = rs.stop_id);
+
+  if v_missing > 0 then
+    if not p_confirm_skip then
+      return json_build_object('status', 'skip_warning', 'stop_name', s.name, 'skipped', v_skipped);
+    end if;
+    insert into public.group_stops (group_id, stop_id, status)
+    select g.id, rs.stop_id, 'skipped' from public._route_stops(g.event_id) rs
+     where rs.pos < v_pos
+    on conflict do nothing;
+  end if;
+
+  select json_agg(json_build_object(
+           'id', q.id,
+           'kind', q.kind,
+           'question', q.question,
+           'options', case when q.kind = 'choice' then json_build_array(q.option_1, q.option_2, q.option_3) end
+         ) order by q.position, q.id)
+    into v_questions
+    from public.questions q
+   where q.stop_id = s.id
+     and not exists (select 1 from public.group_answers ga where ga.group_id = g.id and ga.question_id = q.id);
+
+  return json_build_object('status', 'questions', 'stop_name', s.name, 'questions', coalesce(v_questions, '[]'::json));
+end $$;
+
+-- answer_question: p_choice for alternativ, p_number for tal
+drop function if exists public.answer_question(text, bigint, smallint);
+create or replace function public.answer_question(p_token text, p_question_id bigint,
+                                                  p_choice smallint default null, p_number numeric default null)
+returns json language plpgsql volatile security definer set search_path = public as $$
+declare
+  g public.groups;
+  q public.questions;
+  v_pos int;
+  v_left int;
+begin
+  select * into g from public.groups where leader_token = p_token and p_token is not null;
+  if not found then
+    return json_build_object('status', 'not_leader');
+  end if;
+  if g.finished_at is not null then
+    return json_build_object('status', 'already_finished');
+  end if;
+  select * into q from public.questions where id = p_question_id;
+  if not found then
+    return json_build_object('status', 'invalid');
+  end if;
+  if q.kind = 'number' then
+    if p_number is null or abs(p_number) > 1000000000 then
+      return json_build_object('status', 'invalid');
+    end if;
+  elsif p_choice is null or p_choice not between 1 and 3 then
+    return json_build_object('status', 'invalid');
+  end if;
+
+  select rs.pos into v_pos from public._route_stops(g.event_id) rs where rs.stop_id = q.stop_id;
+  if v_pos is null
+     or exists (select 1 from public.group_stops where group_id = g.id and stop_id = q.stop_id)
+     or exists (select 1 from public._route_stops(g.event_id) rs
+                 where rs.pos < v_pos
+                   and not exists (select 1 from public.group_stops gs where gs.group_id = g.id and gs.stop_id = rs.stop_id))
+  then
+    return json_build_object('status', 'not_current_stop');
+  end if;
+
+  if q.kind = 'number' then
+    insert into public.group_answers (group_id, question_id, choice, number_value, is_correct, points)
+    values (g.id, q.id, null, p_number, p_number = q.correct_number, 0)
+    on conflict (group_id, question_id) do nothing;
+  else
+    insert into public.group_answers (group_id, question_id, choice, is_correct, points)
+    values (g.id, q.id, p_choice, p_choice = q.correct_option,
+            case when p_choice = q.correct_option then 100 else -50 end)
+    on conflict (group_id, question_id) do nothing;
+  end if;
+
+  select count(*) into v_left
+    from public.questions q2
+   where q2.stop_id = q.stop_id
+     and not exists (select 1 from public.group_answers ga where ga.group_id = g.id and ga.question_id = q2.id);
+
+  if v_left = 0 then
+    insert into public.group_stops (group_id, stop_id, status) values (g.id, q.stop_id, 'done')
+    on conflict do nothing;
+    return json_build_object('status', 'stop_done', 'next', public._next_for_group(g.id));
+  end if;
+  return json_build_object('status', 'ok', 'left', v_left);
+end $$;
+
+revoke all on function public._number_points(bigint) from public, anon, authenticated;
+revoke all on function public._group_points(bigint) from public, anon, authenticated;
+grant execute on function public.open_stop(text, text, boolean) to anon, authenticated;
+grant execute on function public.answer_question(text, bigint, smallint, numeric) to anon, authenticated;
+
 -- Admin-brukaren: legg inn e-posten i ein eigen, separat kommando (ikkje i denne fila):
 --   insert into public.admins (email) values ('<klubben sin e-post>') on conflict do nothing;
