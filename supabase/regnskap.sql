@@ -3,7 +3,8 @@
 -- Køyr heile fila i Supabase → SQL Editor (etter arkiv.sql).
 -- Fila kan køyrast fleire gongar.
 --
---  * Berre President og Treasurer (same som regnskapsmappa i arkivet).
+--  * Alle medlemmer ser summane; postar, kvitteringar og føring krev
+--    regnskapstilgang (sjå tilgang.sql – køyr tilgang.sql på nytt etter denne fila).
 --  * Kvar post: dato, konto (bank/kontant), tekst, beløp (+ inn / − ut)
 --    og eventuelt ei kvittering (bilete/PDF) i Storage: arkiv/regnskap/kvitteringar/…
 --  * Oversikt per år med inngåande saldo, inn, ut og utgåande saldo per konto.
@@ -33,16 +34,20 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 revoke all on function public._can_regnskap() from public, anon, authenticated;
 
--- Oversikt for eitt år
+-- Oversikt for eitt år.
+-- Alle godkjende medlemmer ser summane (inn, ut, saldo). Berre dei med
+-- regnskapstilgang får postane ('full' = true). (Kay 2026-11-25)
 create or replace function public.ledger_year(p_year int)
 returns json language plpgsql stable security definer set search_path = public as $$
 declare
   v_fra date := make_date(p_year, 1, 1);
   v_til date := make_date(p_year, 12, 31);
+  v_full boolean := public._can_regnskap();
 begin
-  if not public._can_regnskap() then raise exception 'not_allowed'; end if;
+  if not public.is_member() then raise exception 'not_allowed'; end if;
   return json_build_object(
     'year', p_year,
+    'full', v_full,
     'years', (select coalesce(json_agg(y order by y desc), '[]'::json)
                 from (select distinct extract(year from dato)::int as y from public.ledger
                       union select extract(year from current_date)::int) x),
@@ -56,7 +61,7 @@ begin
                  'id', l.id, 'dato', l.dato, 'konto', l.konto, 'tekst', l.tekst, 'belop', l.belop,
                  'kvittering_path', l.kvittering_path, 'kvittering_namn', l.kvittering_namn,
                  'created_name', l.created_name) order by l.dato desc, l.id desc)
-               from public.ledger l where l.dato between v_fra and v_til), '[]'::json));
+               from public.ledger l where v_full and l.dato between v_fra and v_til), '[]'::json));
 end $$;
 grant execute on function public.ledger_year(int) to authenticated;
 
