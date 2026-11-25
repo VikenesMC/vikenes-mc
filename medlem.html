@@ -869,7 +869,12 @@
           <input id="t-tittel" maxlength="120" placeholder="t.d. Sommartreff hos Eid MC" value="${esc(e.title || "")}">
           <div class="rad" style="align-items:flex-start">
             <div style="flex:1; min-width:140px"><label for="t-dato">Dato</label><input id="t-dato" type="date" value="${e.dato || kalValt}"></div>
-            <div style="flex:1; min-width:110px"><label for="t-tid">Klokka (valfritt)</label><input id="t-tid" type="time" value="${e.tid || ""}"></div>
+            <div style="flex:1; min-width:150px"><label for="t-time">Klokka (valfritt)</label>
+              <div class="rad" style="flex-wrap:nowrap; gap:4px">
+                <select id="t-time" style="margin-top:6px">${tidVal(24, 1, e.tid ? e.tid.slice(0, 2) : "")}</select>
+                <b style="margin-top:6px">:</b>
+                <select id="t-min" style="margin-top:6px">${tidVal(60, 5, e.tid ? e.tid.slice(3, 5) : "")}</select>
+              </div></div>
           </div>
           <label for="t-til">Siste dag (om det varer fleire dagar)</label>
           <input id="t-til" type="date" value="${e.til_dato || ""}">
@@ -909,13 +914,24 @@
       </div>`;
     }
 
+    // 24-timars klokke med eigne nedtrekkslister (nettlesaren kan elles vise AM/PM)
+    function tidVal(maks, steg, valt) {
+      let s = maks === 24 ? `<option value="">--</option>` : "";
+      for (let i = 0; i < maks; i += steg) {
+        const v = String(i).padStart(2, "0");
+        s += `<option ${v === valt ? "selected" : ""}>${v}</option>`;
+      }
+      return s;
+    }
+
     const kalFeil = { bad_title: "Skriv kva arrangementet heiter (2–120 teikn).", bad_dates: "Sjekk datoane.", bad_link: "Lenkja må starte med https://",
       too_long: "Fråvær kan vere maks eitt år om gongen.", not_allowed: "Berre den som la inn arrangementet, eller President/Vice President, kan endre det." };
 
     async function lagreTreff(id) {
       const v = k => document.getElementById(k).value;
       try {
-        await rpc("event_save", { p_id: id, p_title: v("t-tittel"), p_dato: v("t-dato"), p_tid: v("t-tid") || null,
+        const tid = v("t-time") ? `${v("t-time")}:${v("t-min")}` : null;
+        await rpc("event_save", { p_id: id, p_title: v("t-tittel"), p_dato: v("t-dato"), p_tid: tid,
           p_til_dato: v("t-til") || null, p_place: v("t-stad"), p_link: v("t-lenkje"), p_info: v("t-info"), p_arranger: v("t-arr") });
       } catch (e) { document.getElementById("k-melding").textContent = kalFeil[e.message] || e.message; return; }
       kalValt = v("t-dato"); const d = new Date(kalValt + "T12:00:00"); kalMnd = new Date(d.getFullYear(), d.getMonth(), 1);
