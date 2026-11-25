@@ -48,6 +48,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Same innlogging som medlemssida: President/VP kjem rett inn frå medlemsappen -->
+  <script>window.AUTH_LAGER = "vmc-medlem";</script>
   <script src="felles.js"></script>
   <script>
     const MIN_PER_POST = 10;
@@ -62,8 +64,8 @@
       if (!data.session) return visLogin();
       const erAdmin = await rpc("is_admin");
       if (!erAdmin) {
-        await db.auth.signOut();
-        return visLogin("Denne brukaren har ikkje admin-tilgang.");
+        // Ikkje logg ut: då ville medlemmen òg blitt logga ut av medlemsappen
+        return visLogin("Du er logga inn, men har ikkje tilgang til quiz-admin. Be President om tilgang, eller logg inn med admin-kontoen under.");
       }
       document.getElementById("login").style.display = "none";
       document.getElementById("app").style.display = "block";
