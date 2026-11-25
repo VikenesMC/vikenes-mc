@@ -108,7 +108,8 @@ returns json language sql stable security definer set search_path = public as $$
     'id', m.id, 'name', m.name, 'phone', m.phone, 'email', m.email,
     'role', m.role, 'status', m.status,
     'leader', (m.status = 'approved' and m.role in ('President', 'Vice President')),
-    'news_writer', (m.status = 'approved' and m.role in ('President', 'Vice President', 'Secretary')))
+    'news_writer', (m.status = 'approved' and m.role in ('President', 'Vice President', 'Secretary')),
+    'regnskap', (m.status = 'approved' and m.role in ('President', 'Treasurer')))
   from public.members m where m.id = auth.uid()
 $$;
 grant execute on function public.member_me() to authenticated;
