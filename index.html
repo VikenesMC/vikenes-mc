@@ -10,6 +10,9 @@
     header h1, .hero h2, .about h2 {
       font-family: "UnifrakturCook", "Old English Text MT", serif;
     }
+    /* Klubbnamnet er bilete i ekte Old English (same skrift som logoen) */
+    img.oe { height: .9em; width: auto; max-width: 100%; vertical-align: middle; }
+    .about h2 img.oe { height: 1.1em; }
     /* Gotisk berre for klubben – «MC Quiz» i vanleg skrift */
     #quiz h2 { font-family: Arial, sans-serif; }
 
@@ -104,7 +107,7 @@
 <body>
 
   <header>
-    <h1>Vikenes MC</h1>
+    <h1><img class="oe" src="vikenes-tekst.png" alt="Vikenes MC"></h1>
 
     <nav>
       <a href="#">Heim</a>
@@ -118,7 +121,7 @@
 
   <section class="hero">
     <div>
-      <h2>Vikenes MC</h2>
+      <h2><img class="oe" src="vikenes-tekst.png" alt="Vikenes MC"></h2>
       <p>MC-klubb frå Volda</p>
 
       <a class="quiz-button" href="quiz.html">
@@ -128,7 +131,7 @@
   </section>
 
   <section class="about" id="om">
-    <h2>Om Vikenes MC</h2>
+    <h2><img class="oe" src="om-vikenes-tekst.png" alt="Om Vikenes MC"></h2>
     <p>
       Vikenes MC er ein lokal motorsykkelklubb i Volda.
       Klubben starta som Afterbike og fekk namnet Vikenes MC i 2011.
