@@ -808,14 +808,14 @@
             ${celler}
           </div>
           <div class="rad" style="margin-top:12px">
-            <button onclick="kalSkjema={type:'treff', e:null}; visKalender()">＋ Nytt treff</button>
+            <button onclick="kalSkjema={type:'treff', e:null}; visKalender()">＋ Nytt arrangement</button>
             <button class="sekundar" onclick="kalSkjema={type:'fravaer', a:null}; visKalender()">＋ Legg inn fråvær</button>
           </div>
         </div>
         ${kalSkjema ? kalSkjemaHtml() : ""}
         <div class="kort">
           <h2 style="margin-top:0; text-transform:capitalize">${valtDato.toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long" })}</h2>
-          ${dagTreff.map(treffHtml).join("") || '<p class="dempa" style="margin:0">Ingen treff denne dagen.</p>'}
+          ${dagTreff.map(treffHtml).join("") || '<p class="dempa" style="margin:0">Ingen arrangement denne dagen.</p>'}
           ${dagBorte.length ? `<p style="margin:14px 0 0"><b>Borte:</b> ${dagBorte.map(a =>
               `${esc(a.name)} <span class="dempa">(${FRAVAER[a.type]}${a.note ? " – " + esc(a.note) : ""})</span>`).join(", ")}</p>` : ""}
         </div>
@@ -864,7 +864,7 @@
       if (kalSkjema.type === "treff") {
         const e = kalSkjema.e || {};
         return `<div class="kort" id="kalskjema">
-          <h2 style="margin-top:0">${e.id ? "Endre treff" : "Nytt treff"}</h2>
+          <h2 style="margin-top:0">${e.id ? "Endre arrangement" : "Nytt arrangement"}</h2>
           <label for="t-tittel">Kva er det?</label>
           <input id="t-tittel" maxlength="120" placeholder="t.d. Sommartreff hos Eid MC" value="${esc(e.title || "")}">
           <div class="rad" style="align-items:flex-start">
@@ -909,8 +909,8 @@
       </div>`;
     }
 
-    const kalFeil = { bad_title: "Skriv kva treffet heiter (2–120 teikn).", bad_dates: "Sjekk datoane.", bad_link: "Lenkja må starte med https://",
-      too_long: "Fråvær kan vere maks eitt år om gongen.", not_allowed: "Berre den som la inn treffet, eller President/Vice President, kan endre det." };
+    const kalFeil = { bad_title: "Skriv kva arrangementet heiter (2–120 teikn).", bad_dates: "Sjekk datoane.", bad_link: "Lenkja må starte med https://",
+      too_long: "Fråvær kan vere maks eitt år om gongen.", not_allowed: "Berre den som la inn arrangementet, eller President/Vice President, kan endre det." };
 
     async function lagreTreff(id) {
       const v = k => document.getElementById(k).value;
@@ -933,7 +933,7 @@
     function redigerTreff(id) { kalSkjema = { type: "treff", e: kalData.events.find(e => e.id === id) }; visKalender(); }
 
     async function slettTreff(id) {
-      if (!confirm("Slette treffet? Svara blir òg sletta.")) return;
+      if (!confirm("Slette arrangementet? Svara blir òg sletta.")) return;
       try { await rpc("event_delete", { p_id: id }); } catch (e) { alert(kalFeil[e.message] || e.message); }
       visKalender();
     }
@@ -953,7 +953,7 @@
     }
 
     async function delTreff(id) {
-      if (!confirm("Dele treffet i chatten? Alle får varsel og kan svare Ja eller Nei.")) return;
+      if (!confirm("Dele arrangementet i chatten? Alle får varsel og kan svare Ja eller Nei.")) return;
       try {
         const mid = await rpc("event_share", { p_id: id });
         db.functions.invoke("chat-push", { body: { action: "send", message_id: mid } }).catch(() => {});
