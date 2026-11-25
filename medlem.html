@@ -26,6 +26,7 @@
 </head>
 <body>
   <div class="wrap">
+    <p style="margin:0 0 6px"><a href="index.html" class="dempa" style="font-size:15px">← Til framsida</a></p>
     <div class="topp">
       <img class="logo" src="logo.png" alt="Vikenes MC">
       <h1><img class="oe" src="vikenes-tekst.png" alt="Vikenes MC"></h1>
@@ -208,6 +209,7 @@
         <div class="faner2">
           <button data-fane="heim" onclick="visFane('heim')">Heim</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
+          ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>` : ""}
         </div>
         <div id="fane"></div>`);
       visFane(aktivFane);
@@ -218,6 +220,7 @@
       document.querySelectorAll(".faner2 button").forEach(b =>
         b.classList.toggle("aktiv", b.dataset.fane === f));
       if (f === "heim") return visHeim();
+      if (f === "nyheiter") return visNyheiter();
       try { liste = await rpc("member_list"); }
       catch (e) { return start(); }
       visMedlemmer();
@@ -304,6 +307,81 @@
         alert(t);
       }
       visFane("medlemmer");
+    }
+
+    // ---------------- Nyheiter (President, Vice President, Secretary) ----------------
+    let nyheiter = [];
+    let redigerer = null;   // id på saka som blir redigert, "ny" for ny sak
+
+    function dato(iso) {
+      return iso ? new Date(iso).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" }) : "";
+    }
+
+    async function visNyheiter() {
+      try { nyheiter = await rpc("news_all"); }
+      catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const sak = redigerer === "ny" ? {} : nyheiter.find(n => n.id === redigerer);
+      document.getElementById("fane").innerHTML = (redigerer !== null && sak) ? nyheitSkjema(sak) : `
+        <div class="kort">
+          <p class="dempa" style="margin-top:0">Publiserte saker kjem rett på framsida (dei 10 nyaste).</p>
+          <button class="stor" onclick="redigerer='ny'; visNyheiter()">+ Skriv ny sak</button>
+        </div>
+        ${nyheiter.map(n => `
+          <div class="kort" style="${n.published ? "" : "border-top-color:#555"}">
+            <div class="rad" style="justify-content:space-between">
+              <b>${esc(n.title)}</b>
+              ${n.published ? `<span class="merke gronn">Publisert ${esc(dato(n.published_at))}</span>`
+                            : `<span class="merke">Kladd</span>`}
+            </div>
+            <p class="dempa" style="white-space:pre-line; margin-bottom:0">${esc(n.body.length > 200 ? n.body.slice(0, 200) + " …" : n.body)}</p>
+            <p class="dempa" style="font-size:14px">Skriven av ${esc(n.author_name || "–")}</p>
+            <button class="sekundar liten" onclick="redigerer=${n.id}; visNyheiter()">Rediger</button>
+          </div>`).join("") || '<p class="dempa">Ingen saker enno.</p>'}`;
+    }
+
+    function nyheitSkjema(n) {
+      return `
+        <div class="kort">
+          <h2 style="margin-top:0">${n.id ? "Rediger sak" : "Ny sak"}</h2>
+          <label for="n-tittel">Overskrift</label>
+          <input id="n-tittel" maxlength="120" value="${esc(n.title || "")}">
+          <label for="n-tekst">Tekst</label>
+          <textarea id="n-tekst" rows="8" maxlength="5000">${esc(n.body || "")}</textarea>
+          <label for="n-lenkje">Lenkje (valfritt) – t.d. quiz.html eller https://…</label>
+          <input id="n-lenkje" value="${esc(n.link_url || "")}" placeholder="quiz.html">
+          <label for="n-lenkjetekst">Tekst på knappen (valfritt)</label>
+          <input id="n-lenkjetekst" value="${esc(n.link_text || "")}" placeholder="Meld deg på">
+          <div class="rad" style="margin-top:16px">
+            <button onclick="lagreNyheit(${n.id || "null"}, true)">${n.published ? "Lagre" : "Publiser"}</button>
+            <button class="sekundar" onclick="lagreNyheit(${n.id || "null"}, false)">${n.published ? "Gjer om til kladd" : "Lagre som kladd"}</button>
+            <button class="sekundar" onclick="redigerer=null; visNyheiter()">Avbryt</button>
+            ${n.id ? `<button class="fare" onclick="slettNyheit(${n.id})">Slett</button>` : ""}
+          </div>
+          <p id="n-feil" class="feil"></p>
+        </div>`;
+    }
+
+    async function lagreNyheit(id, publiser) {
+      const v = k => document.getElementById(k).value;
+      try {
+        await rpc("news_save", { p_id: id, p_title: v("n-tittel"), p_body: v("n-tekst"),
+          p_link_url: v("n-lenkje"), p_link_text: v("n-lenkjetekst"), p_published: publiser });
+      } catch (e) {
+        const t = { bad_title: "Overskrifta må vere 2–120 teikn.", bad_body: "Teksten er for lang.",
+                    bad_link: "Lenkja må starte med https:// eller vere ei side her, t.d. quiz.html.",
+                    not_allowed: "Berre President, Vice President og Secretary kan skrive nyheiter." }[e.message] || e.message;
+        document.getElementById("n-feil").textContent = t;
+        return;
+      }
+      redigerer = null;
+      visNyheiter();
+    }
+
+    async function slettNyheit(id) {
+      if (!confirm("Slette saka for godt?")) return;
+      try { await rpc("news_delete", { p_id: id }); } catch (e) { alert(e.message); }
+      redigerer = null;
+      visNyheiter();
     }
 
     start();

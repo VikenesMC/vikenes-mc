@@ -3,156 +3,285 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vikenes MC</title>
+  <title>Vikenes MC – motorsykkelklubb i Volda</title>
+  <meta name="description" content="Vikenes MC er ein motorsykkelklubb i Volda, stifta i 2011. Nyheiter, MC Quiz og kontakt.">
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
+  <!-- Korleis sida ser ut når ho blir delt på Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Vikenes MC – motorsykkelklubb i Volda">
+  <meta property="og:description" content="Nyheiter, MC Quiz og kaffi med gutta på torsdagar.">
+  <meta property="og:url" content="https://vikenesmc.no/">
+  <meta property="og:image" content="https://vikenesmc.no/gruppebilete.jpg">
+  <meta property="og:locale" content="nn_NO">
+
+  <link rel="icon" href="logo.png">
   <style>
-    header h1, .hero h2, .about h2 {
-      font-family: "UnifrakturCook", "Old English Text MT", serif;
+    :root {
+      --oransje: #FC8D00;
+      --bg: #0b0b0b;
+      --kort: #161616;
+      --linje: #2a2a2a;
+      --tekst: #f4f4f4;
+      --dempa: #b5b5b5;
     }
-    /* Klubbnamnet er bilete i ekte Old English (same skrift som logoen) */
-    img.oe { height: .9em; width: auto; max-width: 100%; vertical-align: middle; }
-    .about h2 img.oe { height: 1.1em; }
-    /* Gotisk berre for klubben – «MC Quiz» i vanleg skrift */
-    #quiz h2 { font-family: Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+    html, body { overflow-x: clip; }  /* clip (ikkje hidden) så den faste menyen verkar */
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--bg); color: var(--tekst); line-height: 1.55; }
+    a { color: var(--oransje); }
+    img { max-width: 100%; }
 
-    /* Oransje stripe med vinge-logo, som på veggen i lokalet */
-    .stripe {
-      padding: 10px 0;
-      background: linear-gradient(to bottom,
-        #111 0, #111 41%, #FC8D00 41%, #FC8D00 63%, #111 63%, #111 100%);
+    /* ---------- Meny ---------- */
+    .meny {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(0,0,0,.92); backdrop-filter: blur(6px);
+      border-bottom: 3px solid var(--oransje);
     }
-    .stripe img { display: block; margin: 0 auto; width: 92%; max-width: 640px; height: auto; }
-    header { border-bottom: 3px solid #FC8D00 !important; }
-    .quiz-button { background: #FC8D00 !important; color: #000 !important; }
+    .meny-inn { max-width: 1100px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 14px; }
+    .meny .merke { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .meny .merke img.logo { width: 40px; height: 40px; }
+    .meny .merke img.namn { height: 22px; width: auto; }
+    .meny nav { margin-left: auto; display: flex; gap: 18px; align-items: center; }
+    .meny nav a { color: #fff; text-decoration: none; font-weight: bold; font-size: 15px; }
+    .meny nav a:hover { color: var(--oransje); }
+    .meny nav a.logginn { background: var(--oransje); color: #000; padding: 8px 14px; border-radius: 6px; }
+    .meny nav a.logginn:hover { color: #000; background: #ffa733; }
+    .burger { display: none; margin-left: auto; background: none; border: 0; color: #fff; font-size: 28px; cursor: pointer; padding: 4px 8px; }
 
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #fff;
-    }
-
-    header {
-      background: #000;
-      padding: 20px;
-      text-align: center;
-      border-bottom: 2px solid #555;
-    }
-
-    header h1 {
-      margin: 0;
-      font-size: 42px;
-    }
-
-    nav {
-      margin-top: 15px;
-    }
-
-    nav a {
-      color: #fff;
-      text-decoration: none;
-      margin: 0 12px;
-      font-weight: bold;
+    @media (max-width: 760px) {
+      .meny .merke img.namn { display: none; }
+      .burger { display: block; }
+      .meny nav {
+        display: none; position: absolute; left: 0; right: 0; top: 100%;
+        flex-direction: column; align-items: stretch; gap: 0;
+        background: #000; border-bottom: 3px solid var(--oransje);
+      }
+      .meny nav.open { display: flex; }
+      .meny nav a { padding: 14px 20px; border-top: 1px solid var(--linje); font-size: 17px; }
+      .meny nav a.logginn { margin: 12px 16px; text-align: center; }
     }
 
-    .hero {
-      min-height: 420px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 40px 20px;
-      background: linear-gradient(#181818, #0b0b0b);
+    /* ---------- Front ---------- */
+    .front { position: relative; background: #000; }
+    .front img.bilete { display: block; width: 100%; height: auto; max-height: 78vh; object-fit: cover; object-position: center 20%; }
+    /* Teksten ligg under biletet, så ingen andlet blir dekte */
+    .front .tekst { padding: 22px 16px 30px; text-align: center; background: #000; }
+    .front h1 { margin: 0; line-height: 1; }
+    .front h1 img { height: 64px; width: auto; max-width: 92%; filter: drop-shadow(0 2px 6px rgba(0,0,0,.9)); }
+    .front p { margin: 10px 0 0; font-size: 19px; color: #ddd; text-shadow: 0 1px 4px #000; }
+    .front .knappar { margin-top: 18px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    @media (max-width: 760px) {
+      .front .tekst { padding: 18px 16px 26px; }
+      .front h1 img { height: 44px; }
+      .front p { font-size: 17px; }
     }
 
-    .hero h2 {
-      font-size: 48px;
-      margin-bottom: 10px;
+    .knapp {
+      display: inline-block; padding: 13px 24px; border-radius: 8px;
+      background: var(--oransje); color: #000; font-weight: bold; font-size: 17px; text-decoration: none;
     }
+    .knapp:hover { background: #ffa733; }
+    .knapp.sekundar { background: transparent; color: #fff; border: 2px solid #fff; padding: 11px 22px; }
+    .knapp.sekundar:hover { background: #fff; color: #000; }
 
-    .hero p {
-      font-size: 20px;
-      color: #ccc;
-    }
+    /* ---------- Bolkar ---------- */
+    .stripe { height: 14px; background: linear-gradient(to bottom, #000 0 30%, var(--oransje) 30% 70%, #000 70% 100%); }
+    section { padding: 56px 16px; }
+    section:nth-of-type(even) { background: #111; }
+    .inn { max-width: 1000px; margin: 0 auto; }
+    h2 { font-size: 30px; margin: 0 0 22px; text-transform: uppercase; letter-spacing: 2px; }
+    h2::after { content: ""; display: block; width: 60px; height: 4px; background: var(--oransje); margin-top: 10px; }
+    .ingress { font-size: 19px; color: #ddd; max-width: 720px; }
 
-    .quiz-button {
-      display: inline-block;
-      margin-top: 25px;
-      padding: 15px 30px;
-      background: #fff;
-      color: #111;
-      text-decoration: none;
-      font-weight: bold;
-      border-radius: 6px;
-      font-size: 18px;
-    }
+    /* Nyheiter */
+    .nyheiter { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+    .sak { background: var(--kort); border-top: 4px solid var(--oransje); border-radius: 10px; padding: 20px; }
+    .sak .dato { color: var(--oransje); font-size: 14px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+    .sak h3 { margin: 6px 0 10px; font-size: 22px; line-height: 1.25; }
+    .sak .brod { white-space: pre-line; color: #ddd; }
+    .sak .knapp { margin-top: 14px; font-size: 15px; padding: 10px 18px; }
+    .tom { color: var(--dempa); font-style: italic; }
 
-    .about {
-      max-width: 900px;
-      margin: auto;
-      padding: 60px 20px;
-      text-align: center;
+    /* MC Quiz */
+    .quiz { display: grid; grid-template-columns: 1.2fr 1fr; gap: 32px; align-items: start; }
+    .steg { list-style: none; padding: 0; margin: 0; counter-reset: steg; }
+    .steg li { position: relative; padding: 0 0 18px 52px; counter-increment: steg; }
+    .steg li::before {
+      content: counter(steg); position: absolute; left: 0; top: -2px;
+      width: 36px; height: 36px; border-radius: 50%; background: var(--oransje); color: #000;
+      font-weight: bold; display: flex; align-items: center; justify-content: center;
     }
+    .faktaboks { background: var(--kort); border-radius: 10px; padding: 22px; border-left: 4px solid var(--oransje); }
+    .faktaboks dl { margin: 0; }
+    .faktaboks dt { color: var(--oransje); font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 14px; }
+    .faktaboks dt:first-child { margin-top: 0; }
+    .faktaboks dd { margin: 2px 0 0; }
+    @media (max-width: 760px) { .quiz { grid-template-columns: 1fr; } }
 
-    footer {
-      background: #000;
-      text-align: center;
-      padding: 20px;
-      color: #888;
-    }
+    /* Om klubben */
+    .om { display: grid; grid-template-columns: 1fr 260px; gap: 32px; align-items: center; }
+    .om img { width: 100%; filter: drop-shadow(0 0 2px rgba(255,255,255,.5)); }
+    .torsdag { margin-top: 20px; background: var(--oransje); color: #000; border-radius: 10px; padding: 16px 20px; font-size: 18px; }
+    .torsdag b { display: block; font-size: 21px; }
+    @media (max-width: 760px) { .om { grid-template-columns: 1fr; } .om img { max-width: 200px; margin: 0 auto; display: block; } }
+
+    /* Kontakt */
+    .kontakt { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+    .kontakt .kort { background: var(--kort); border-radius: 10px; padding: 22px; }
+    .kontakt h3 { margin: 0 0 8px; color: var(--oransje); font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+    .kontakt p { margin: 0 0 12px; font-size: 18px; }
+
+    footer { background: #000; border-top: 3px solid var(--oransje); padding: 26px 16px; text-align: center; color: #888; font-size: 15px; }
+    footer img { height: 26px; width: auto; vertical-align: middle; }
   </style>
 </head>
-
 <body>
 
-  <header>
-    <h1><img class="oe" src="vikenes-tekst.png" alt="Vikenes MC"></h1>
-
-    <nav>
-      <a href="#">Heim</a>
-      <a href="#om">Om oss</a>
-      <a href="#">Galleri</a>
-      <a href="quiz.html">MC Quiz</a>
-    </nav>
+  <header class="meny">
+    <div class="meny-inn">
+      <a class="merke" href="#">
+        <img class="logo" src="logo.png" alt="">
+        <img class="namn" src="vikenes-tekst.png" alt="Vikenes MC">
+      </a>
+      <button class="burger" aria-label="Meny" aria-expanded="false" onclick="vekslMeny(this)">☰</button>
+      <nav id="nav">
+        <a href="#nyheiter">Nyheiter</a>
+        <a href="#quiz">MC Quiz</a>
+        <a href="#om">Om klubben</a>
+        <a href="#kontakt">Kontakt</a>
+        <a class="logginn" href="medlem.html">Medlem? Logg inn</a>
+      </nav>
+    </div>
   </header>
 
-  <div class="stripe"><img src="vinge-logo.png" alt="Vikenes MC logo"></div>
+  <div class="front">
+    <img class="bilete" src="gruppebilete.jpg" alt="Medlemmene i Vikenes MC framfor klubblogoen på veggen i lokalet">
+    <div class="tekst">
+      <h1><img src="vikenes-tekst.png" alt="Vikenes MC"></h1>
+      <p>Motorsykkelklubb i Volda – sidan 2011</p>
+      <div class="knappar">
+        <a class="knapp" href="#quiz">MC Quiz</a>
+        <a class="knapp sekundar" href="#om">Om klubben</a>
+      </div>
+    </div>
+  </div>
+  <div class="stripe"></div>
 
-  <section class="hero">
-    <div>
-      <h2><img class="oe" src="vikenes-tekst.png" alt="Vikenes MC"></h2>
-      <p>MC-klubb frå Volda</p>
-
-      <a class="quiz-button" href="quiz.html">
-        MC Quiz
-      </a>
+  <section id="nyheiter">
+    <div class="inn">
+      <h2>Nyheiter</h2>
+      <div class="nyheiter" id="nyheitsliste"><p class="tom">Lastar nyheiter …</p></div>
     </div>
   </section>
 
-  <section class="about" id="om">
-    <h2><img class="oe" src="om-vikenes-tekst.png" alt="Om Vikenes MC"></h2>
-    <p>
-      Vikenes MC er ein lokal motorsykkelklubb i Volda.
-      Klubben starta som Afterbike og fekk namnet Vikenes MC i 2011.
-    </p>
+  <section id="quiz">
+    <div class="inn">
+      <h2>MC Quiz</h2>
+      <div class="quiz">
+        <div>
+          <p class="ingress">Eit sosialt quizløp på motorsykkel. De køyrer saman i grupper mellom postar
+            langs vegen, og på kvar post ventar spørsmål om klubben, motorsyklar og litt av kvart.</p>
+          <ol class="steg">
+            <li><b>Meld deg på</b> og betal ved oppmøte på klubben.</li>
+            <li><b>Få gruppe.</b> Du ser gruppa di og starttida på skjermen i lokalet.</li>
+            <li><b>Køyr til postane.</b> Leiaren i gruppa skannar QR-koden og de svarer saman.</li>
+            <li><b>Tilbake til klubben</b> til kaffi, vaflar og premieutdeling.</li>
+          </ol>
+        </div>
+        <div class="faktaboks">
+          <dl>
+            <dt>Neste løp</dt>
+            <dd>Sommaren 2027 – dato kjem</dd>
+            <dt>Poeng</dt>
+            <dd>+100 for rett svar, −50 for feil</dd>
+            <dt>Tid</dt>
+            <dd>Tida tel ikkje – det lønner seg ikkje å køyre fort</dd>
+            <dt>Mål</dt>
+            <dd>Bli kjend med nye folk og finne nye kjørevenner</dd>
+          </dl>
+          <p style="margin:20px 0 0"><a class="knapp" href="quiz.html">Til påmeldinga</a></p>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <section class="about" id="quiz">
-    <h2>MC Quiz</h2>
-    <p>
-      Delta på Vikenes MC sin MC Quiz.
-      Registrering, grupper, postar og spørsmål blir styrt digitalt.
-    </p>
+  <section id="om">
+    <div class="inn om">
+      <div>
+        <h2>Om klubben</h2>
+        <p class="ingress">Vikenes MC er ein motorsykkelklubb i Volda. Klubben starta som Afterbike
+          og fekk namnet Vikenes MC i 2011.</p>
+        <p>Vi har eige klubblokale på Vikenes, der vi samlast for kaffi, prat og planlegging av turar
+          – og der det skjer det meste som har med klubben å gjere.</p>
+        <div class="torsdag">
+          <b>☕ Kaffi med gutta</b>
+          Torsdagar er du velkomen innom lokalet på ein kopp kaffi.
+        </div>
+      </div>
+      <img src="logo.png" alt="Klubblogoen til Vikenes MC">
+    </div>
+  </section>
 
-    <a class="quiz-button" href="quiz.html">
-      Start MC Quiz
-    </a>
+  <section id="kontakt">
+    <div class="inn">
+      <h2>Kontakt</h2>
+      <div class="kontakt">
+        <div class="kort">
+          <h3>Finn oss</h3>
+          <p>Vikenesvegen 8<br>6100 Volda</p>
+          <a class="knapp" href="https://www.google.com/maps/search/?api=1&query=Vikenesvegen+8%2C+6100+Volda" target="_blank" rel="noopener">Opne i kart</a>
+        </div>
+        <div class="kort">
+          <h3>E-post</h3>
+          <p><a href="mailto:vikenesmc@gmail.com">vikenesmc@gmail.com</a></p>
+        </div>
+        <div class="kort">
+          <h3>Medlem</h3>
+          <p>Eiga side for medlemmene i klubben.</p>
+          <a class="knapp" href="medlem.html">Logg inn</a>
+        </div>
+      </div>
+    </div>
   </section>
 
   <footer>
-    © Vikenes MC
+    <img src="vikenes-tekst.png" alt="Vikenes MC"> &nbsp;·&nbsp; Volda &nbsp;·&nbsp; sidan 2011
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="felles.js"></script>
+  <script>
+    function vekslMeny(b) {
+      const nav = document.getElementById("nav");
+      const open = nav.classList.toggle("open");
+      b.setAttribute("aria-expanded", open);
+    }
+    // Lukk mobilmenyen når ein trykkjer på ei lenkje
+    document.querySelectorAll("#nav a").forEach(a => a.addEventListener("click", () =>
+      document.getElementById("nav").classList.remove("open")));
+
+    function trygLenkje(u) {
+      return /^https:\/\/[^\s<>"]+$/.test(u) || /^[a-z0-9_\-]+\.html(\?[^\s<>"]*)?$/.test(u);
+    }
+
+    async function lastNyheiter() {
+      const boks = document.getElementById("nyheitsliste");
+      try {
+        const saker = await rpc("news_public");
+        if (!saker.length) { boks.innerHTML = '<p class="tom">Ingen nyheiter enno.</p>'; return; }
+        boks.innerHTML = saker.map(n => `
+          <article class="sak">
+            <div class="dato">${esc(new Date(n.published_at).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" }))}</div>
+            <h3>${esc(n.title)}</h3>
+            <div class="brod">${esc(n.body)}</div>
+            ${n.link_url && trygLenkje(n.link_url)
+              ? `<a class="knapp" href="${esc(n.link_url)}"${n.link_url.startsWith("https://") ? ' target="_blank" rel="noopener"' : ""}>${esc(n.link_text || "Les meir")}</a>` : ""}
+          </article>`).join("");
+      } catch (e) {
+        boks.innerHTML = '<p class="tom">Klarte ikkje å hente nyheiter no.</p>';
+      }
+    }
+    lastNyheiter();
+  </script>
 </body>
 </html>
