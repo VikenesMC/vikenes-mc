@@ -625,14 +625,15 @@
     }
 
     async function visGjestebok() {
-      let liste;
-      try { liste = await rpc("guestbook_all"); }
+      let liste, ukjende = [];
+      try { [liste, ukjende] = await Promise.all([rpc("guestbook_all"), rpc("unknown_clubs")]); }
       catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
       const ventar = liste.filter(h => h.status === "pending");
       const godkjende = liste.filter(h => h.status === "approved");
       const kort = h => `
         <div class="medlem">
-          <div class="namn">${esc(h.name)} <span class="dempa" style="font-weight:normal; font-size:14px">${esc(dato(h.created_at))}</span></div>
+          <div class="namn">${esc(h.name)}${h.club_name ? ` <span style="color:var(--oransje); font-weight:normal">· ${esc(h.club_name)}</span>` : ""}
+            <span class="dempa" style="font-weight:normal; font-size:14px">${esc(dato(h.created_at))}</span></div>
           <div style="white-space:pre-line; margin-top:4px">${esc(h.message)}</div>
           <div class="rad">
             ${h.status === "pending" ? `<button onclick="godkjennHelsing(${h.id})">Godkjenn</button>` : ""}
@@ -640,6 +641,16 @@
           </div>
         </div>`;
       document.getElementById("fane").innerHTML = `
+        ${ukjende.length ? `<div class="kort" style="border-top-color:var(--gul)">
+          <h2 style="margin-top:0">Nye klubbar som har sjekka inn (${ukjende.length})</h2>
+          <p class="dempa" style="margin-top:0">Desse er ikkje under «Klubbar i nærområdet» enno. Send namn, stad og logo
+            til den som held nettsida, og trykk «Ordna» når klubben er lagd til.</p>
+          ${ukjende.map(k => `<div class="medlem">
+              <div class="namn">${esc(k.club_name)}</div>
+              <div class="info">${k.count} innsjekk · sist ${esc(dato(k.last))}</div>
+              <div class="rad"><button class="sekundar" data-klubb="${esc(k.club_name)}" onclick="ukjendOrdna(this.dataset.klubb)">Ordna</button></div>
+            </div>`).join("")}
+        </div>` : ""}
         <div class="kort" style="border-top-color:var(--gul)">
           <h2 style="margin-top:0">Ventar på godkjenning (${ventar.length})</h2>
           ${ventar.map(kort).join("") || '<p class="dempa">Ingen nye helsingar.</p>'}
@@ -649,6 +660,12 @@
           ${godkjende.map(kort).join("") || '<p class="dempa">Ingen enno.</p>'}
         </div>`;
       oppdaterGjestetal();
+    }
+
+    async function ukjendOrdna(namn) {
+      if (!confirm(`Merke «${namn}» som ordna?`)) return;
+      try { await rpc("unknown_club_handled", { p_club_name: namn }); } catch (e) { alert(e.message); }
+      visGjestebok();
     }
 
     async function godkjennHelsing(id) {

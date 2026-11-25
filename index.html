@@ -155,6 +155,16 @@
     .skriv { background: var(--kort); border-radius: 10px; padding: 22px; border-top: 4px solid var(--oransje); }
     .skriv label { display: block; font-weight: bold; margin: 0 0 6px; }
     .skriv label + input, .skriv label + textarea { margin-bottom: 14px; }
+    .skriv label.kryss { display: flex; gap: 10px; align-items: center; font-weight: bold; margin: 0 0 16px; cursor: pointer;
+      background: #222; border: 2px solid var(--oransje); border-radius: 8px; padding: 12px; }
+    .skriv label.kryss input { width: 22px; height: 22px; margin: 0; flex: none; accent-color: var(--oransje); }
+    .skriv select { width: 100%; padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid var(--linje); margin-bottom: 14px; background: #fff; color: #111; }
+    #g-annan { margin-top: -6px; }
+    /* Pokal med tal på klubbkortet */
+    .ven { position: relative; }
+    .ven .pokal { position: absolute; top: 18px; right: 18px; background: var(--oransje); color: #000; font-weight: bold;
+      border-radius: 20px; padding: 3px 9px; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+    .helsing .klubb { color: var(--oransje); font-size: 14px; margin-left: 6px; }
     .skriv input, .skriv textarea {
       width: 100%; padding: 12px; font-size: 16px; font-family: inherit;
       border: 1px solid var(--linje); border-radius: 6px; background: #fff; color: #111;
@@ -338,16 +348,22 @@
   <section id="gjestebok">
     <div class="inn">
       <h2>Gjestebok</h2>
-      <p class="ingress">Legg igjen ei helsing til klubben! Helsingane blir viste her når styret har godkjent dei.</p>
+      <p class="ingress">På besøk hos oss? Sjekk inn for klubben din, og legg gjerne igjen ei helsing!
+        Klubbar som har vore innom, får ein 🏆 med tal under «Klubbar i nærområdet».
+        Helsingane blir viste her når styret har godkjent dei.</p>
       <div class="gjestebok">
         <form class="skriv" onsubmit="sendHelsing(event)">
           <label for="g-namn">Namnet ditt</label>
           <input id="g-namn" maxlength="60" autocomplete="name" required>
-          <label for="g-tekst">Helsing</label>
-          <textarea id="g-tekst" rows="5" maxlength="1000" required></textarea>
+          <label for="g-klubb">Klubben din</label>
+          <select id="g-klubb" onchange="klubbEndra()"></select>
+          <input id="g-annan" maxlength="80" placeholder="Namnet på klubben" style="display:none">
+          <label class="kryss"><input type="checkbox" id="g-sjekkinn"> 🏆 Sjekk inn – vi er på besøk hos Vikenes MC</label>
+          <label for="g-tekst">Helsing <span style="font-weight:normal; color:var(--dempa)">(valfritt om du sjekkar inn)</span></label>
+          <textarea id="g-tekst" rows="4" maxlength="1000"></textarea>
           <!-- Felle for robotar: usynleg for folk -->
           <input id="g-felle" class="felle" tabindex="-1" autocomplete="off" aria-hidden="true">
-          <button class="knapp" type="submit">Send helsing</button>
+          <button class="knapp" type="submit">Send</button>
           <p id="g-svar" class="svar"></p>
         </form>
         <div id="helsingar" class="helsingar"><p class="tom">Lastar helsingar …</p></div>
@@ -424,7 +440,7 @@
         if (!liste.length) { boks.innerHTML = '<p class="tom">Ingen helsingar enno – bli den første!</p>'; return; }
         boks.innerHTML = liste.map(h => `
           <div class="helsing">
-            <span class="kven">${esc(h.name)}</span>
+            <span class="kven">${esc(h.name)}</span>${h.club_name ? `<span class="klubb">${esc(h.club_name)}</span>` : ""}
             <span class="naar">${esc(new Date(h.created_at).toLocaleDateString("nb-NO", { day: "numeric", month: "long", year: "numeric" }))}</span>
             <div class="tekst">${esc(h.message)}</div>
           </div>`).join("");
@@ -433,33 +449,85 @@
       }
     }
 
+    // ---------- Klubbar: liste til gjesteboka og pokalar ----------
+    function klubbSlug(ven) {
+      const src = ven.querySelector("img").getAttribute("src");
+      return src.split("/").pop().split("?")[0].replace(/\.[a-z]+$/, "");
+    }
+    const klubbar = [...document.querySelectorAll(".ven")].map(v => ({
+      slug: klubbSlug(v), namn: v.querySelector("h3").textContent.trim(), el: v }));
+
+    function fyllKlubbliste() {
+      const sel = document.getElementById("g-klubb");
+      sel.innerHTML = `<option value="">– Vel klubb –</option>` +
+        klubbar.map(k => `<option value="${esc(k.slug)}">${esc(k.namn)}</option>`).join("") +
+        `<option value="__annan">Annan klubb (skriv namnet)</option>
+         <option value="__ingen">Ingen klubb</option>`;
+    }
+    function klubbEndra() {
+      const annan = document.getElementById("g-klubb").value === "__annan";
+      const felt = document.getElementById("g-annan");
+      felt.style.display = annan ? "block" : "none";
+      if (annan) felt.focus();
+    }
+
+    async function lastPokalar() {
+      try {
+        const tal = await rpc("checkin_counts");
+        for (const k of klubbar) {
+          k.el.querySelector(".pokal")?.remove();
+          if (tal[k.slug]) k.el.insertAdjacentHTML("afterbegin",
+            `<span class="pokal" title="Har sjekka inn hos Vikenes MC">🏆 ${tal[k.slug]}</span>`);
+        }
+      } catch (e) { /* ikkje kritisk */ }
+    }
+
     async function sendHelsing(ev) {
       ev.preventDefault();
       const svar = document.getElementById("g-svar");
       const knapp = ev.target.querySelector("button");
       const namn = document.getElementById("g-namn").value.trim();
       const tekst = document.getElementById("g-tekst").value.trim();
+      const val = document.getElementById("g-klubb").value;
+      const sjekkInn = document.getElementById("g-sjekkinn").checked;
+      let slug = null, klubbnamn = null;
+      if (val === "__annan") klubbnamn = document.getElementById("g-annan").value.trim() || null;
+      else if (val && val !== "__ingen") { slug = val; klubbnamn = klubbar.find(k => k.slug === val)?.namn || null; }
       svar.className = "svar"; svar.textContent = "";
+      if (sjekkInn && !klubbnamn) { svar.textContent = "Vel klubben din (eller skriv namnet) for å sjekke inn."; svar.classList.add("feil"); return; }
+      if (!sjekkInn && !tekst) { svar.textContent = "Skriv ei helsing, eller kryss av for å sjekke inn."; svar.classList.add("feil"); return; }
       knapp.disabled = true;
       try {
-        const s = await rpc("guestbook_post", { p_name: namn, p_message: tekst,
-                                                 p_trap: document.getElementById("g-felle").value });
-        const melding = {
-          ok: "Takk for helsinga! Ho blir synleg når styret har godkjent ho.",
-          bad_name: "Skriv namnet ditt (2–60 teikn).",
-          bad_message: "Skriv ei helsing (2–1000 teikn).",
-          busy: "Mange skriv akkurat no – prøv igjen om eit minutt.",
-          queue_full: "Gjesteboka tek ikkje imot fleire helsingar akkurat no. Prøv igjen seinare."
-        }[s] || "Noko gjekk gale. Prøv igjen.";
+        const s = await rpc("guest_submit", { p_name: namn, p_message: tekst, p_club_slug: slug,
+          p_club_name: klubbnamn, p_checkin: sjekkInn, p_trap: document.getElementById("g-felle").value });
+        const ok = s === "ok" || s === "ok_checkin_busy";
+        let melding;
+        if (ok) {
+          melding = sjekkInn ? `Velkomen, ${klubbnamn}! 🏆 Innsjekkinga er registrert.` : "";
+          if (tekst && s === "ok") melding += (melding ? " " : "") + "Helsinga blir synleg når styret har godkjent ho.";
+          if (s === "ok_checkin_busy") melding += " Helsinga kom ikkje med – prøv igjen om litt.";
+          if (sjekkInn && !slug) melding += " Klubben dykkar er ikkje på lista enno – vi legg han til.";
+        } else {
+          melding = {
+            bad_name: "Skriv namnet ditt (2–60 teikn).",
+            bad_message: "Helsinga må vere 2–1000 teikn.",
+            need_club: "Vel klubben din for å sjekke inn.",
+            nothing: "Skriv ei helsing, eller kryss av for å sjekke inn.",
+            busy: "Mange skriv akkurat no – prøv igjen om eit minutt.",
+            queue_full: "Gjesteboka tek ikkje imot fleire helsingar akkurat no. Prøv igjen seinare."
+          }[s] || "Noko gjekk gale. Prøv igjen.";
+        }
         svar.textContent = melding;
-        svar.classList.add(s === "ok" ? "ok" : "feil");
-        if (s === "ok") ev.target.reset();
+        svar.classList.add(ok ? "ok" : "feil");
+        if (ok) { ev.target.reset(); klubbEndra(); if (sjekkInn) lastPokalar(); }
       } catch (e) {
         svar.textContent = "Noko gjekk gale. Prøv igjen.";
         svar.classList.add("feil");
       }
       knapp.disabled = false;
     }
+    fyllKlubbliste();
+    lastPokalar();
     lastHelsingar();
   </script>
 </body>
