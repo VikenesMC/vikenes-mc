@@ -209,10 +209,12 @@
         <div class="faner2">
           <button data-fane="heim" onclick="visFane('heim')">Heim</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
-          ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>` : ""}
+          ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
+                               <button data-fane="gjestebok" onclick="visFane('gjestebok')">Gjestebok<span id="g-tal"></span></button>` : ""}
         </div>
         <div id="fane"></div>`);
       visFane(aktivFane);
+      if (meg.news_writer) oppdaterGjestetal();
     }
 
     async function visFane(f) {
@@ -221,6 +223,7 @@
         b.classList.toggle("aktiv", b.dataset.fane === f));
       if (f === "heim") return visHeim();
       if (f === "nyheiter") return visNyheiter();
+      if (f === "gjestebok") return visGjestebok();
       try { liste = await rpc("member_list"); }
       catch (e) { return start(); }
       visMedlemmer();
@@ -382,6 +385,53 @@
       try { await rpc("news_delete", { p_id: id }); } catch (e) { alert(e.message); }
       redigerer = null;
       visNyheiter();
+    }
+
+    // ---------------- Gjestebok (President, Vice President, Secretary) ----------------
+    async function oppdaterGjestetal() {
+      try {
+        const n = await rpc("guestbook_pending_count");
+        const el = document.getElementById("g-tal");
+        if (el) el.textContent = n ? ` (${n})` : "";
+      } catch (e) { /* ikkje kritisk */ }
+    }
+
+    async function visGjestebok() {
+      let liste;
+      try { liste = await rpc("guestbook_all"); }
+      catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const ventar = liste.filter(h => h.status === "pending");
+      const godkjende = liste.filter(h => h.status === "approved");
+      const kort = h => `
+        <div class="medlem">
+          <div class="namn">${esc(h.name)} <span class="dempa" style="font-weight:normal; font-size:14px">${esc(dato(h.created_at))}</span></div>
+          <div style="white-space:pre-line; margin-top:4px">${esc(h.message)}</div>
+          <div class="rad">
+            ${h.status === "pending" ? `<button onclick="godkjennHelsing(${h.id})">Godkjenn</button>` : ""}
+            <button class="${h.status === "pending" ? "sekundar" : "fare"}" onclick="slettHelsing(${h.id})">Slett</button>
+          </div>
+        </div>`;
+      document.getElementById("fane").innerHTML = `
+        <div class="kort" style="border-top-color:var(--gul)">
+          <h2 style="margin-top:0">Ventar på godkjenning (${ventar.length})</h2>
+          ${ventar.map(kort).join("") || '<p class="dempa">Ingen nye helsingar.</p>'}
+        </div>
+        <div class="kort">
+          <h2 style="margin-top:0">Synlege på framsida (${godkjende.length})</h2>
+          ${godkjende.map(kort).join("") || '<p class="dempa">Ingen enno.</p>'}
+        </div>`;
+      oppdaterGjestetal();
+    }
+
+    async function godkjennHelsing(id) {
+      try { await rpc("guestbook_approve", { p_id: id }); } catch (e) { alert(e.message); }
+      visGjestebok();
+    }
+
+    async function slettHelsing(id) {
+      if (!confirm("Slette helsinga for godt?")) return;
+      try { await rpc("guestbook_delete", { p_id: id }); } catch (e) { alert(e.message); }
+      visGjestebok();
     }
 
     start();
