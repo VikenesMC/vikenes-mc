@@ -560,7 +560,16 @@
         el.innerHTML = `<div class="kort" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
           <img src="app-ikon.png" alt="" style="width:48px; height:48px; border-radius:12px">
           <div style="flex:1"><b>Vikenes MC-appen</b><br><span class="dempa" style="font-size:14px">Legg medlemssida på heimeskjermen</span></div>
-          <button style="margin:0" onclick="installerApp()">📲 Installer</button></div>`;
+          <div class="rad" style="gap:6px">
+            <button class="sekundar" style="margin:0" onclick="visAppQR()">QR-kode</button>
+            <button style="margin:0" onclick="installerApp()">📲 Installer</button>
+          </div></div>`;
+      } else if (!/Mobi|Android|iPhone|iPad/.test(navigator.userAgent)) {
+        // PC utan installer-knapp: tilby QR-kode så appen kan lastast ned på mobilen
+        el.innerHTML = `<div class="kort" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
+          <img src="app-ikon.png" alt="" style="width:48px; height:48px; border-radius:12px">
+          <div style="flex:1"><b>Vikenes MC-appen</b><br><span class="dempa" style="font-size:14px">Skann for å få appen på mobilen</span></div>
+          <button style="margin:0" onclick="visAppQR()">QR-kode</button></div>`;
       } else if (erIOS && bedt) {
         el.innerHTML = `<div class="kort" style="padding:14px 16px">
           <b>📲 Installer Vikenes MC-appen på iPhone</b>
@@ -576,6 +585,20 @@
       } else {
         el.innerHTML = "";
       }
+    }
+
+    // QR-kode til medlemssida, så appen kan installerast på mobilen
+    function visAppQR() {
+      const bak = document.createElement("div");
+      bak.className = "modal-bak";
+      bak.innerHTML = `<div class="modal">
+        <h2 style="margin-top:0">Appen på mobilen</h2>
+        <p class="dempa" style="margin:0">Skann med mobilkameraet, logg inn og trykk «Installer»</p>
+        <div class="qr-boks" id="app-qr"></div>
+        <button class="stor" onclick="this.closest('.modal-bak').remove()">Lukk</button>
+      </div>`;
+      document.body.appendChild(bak);
+      new QRCode(document.getElementById("app-qr"), { text: BASE_URL + "medlem.html?app", width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
     }
 
     async function installerApp() {
