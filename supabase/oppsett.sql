@@ -15,12 +15,17 @@ create table if not exists public.admins (
   email text primary key
 );
 
+-- Admin = e-post i admins-tabellen, ELLER godkjend President / Vice President
+-- på medlemssida (Kay 2026-11-25: dei skal kome inn med medlemsinnlogginga si).
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.admins a
     where lower(a.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-  )
+  ) or (to_regclass('public.members') is not null and exists (
+    select 1 from public.members m
+    where m.id = auth.uid() and m.status = 'approved' and m.role in ('President', 'Vice President')
+  ))
 $$;
 
 -- ---------- Arrangement ----------
