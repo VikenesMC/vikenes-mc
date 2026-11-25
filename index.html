@@ -42,13 +42,13 @@
     .meny .merke img.logo { width: 40px; height: 40px; }
     .meny .merke img.namn { height: 22px; width: auto; }
     .meny nav { margin-left: auto; display: flex; gap: 18px; align-items: center; }
-    .meny nav a { color: #fff; text-decoration: none; font-weight: bold; font-size: 15px; }
+    .meny nav a { color: #fff; text-decoration: none; font-weight: bold; font-size: 15px; white-space: nowrap; }
     .meny nav a:hover { color: var(--oransje); }
     .meny nav a.logginn { background: var(--oransje); color: #000; padding: 8px 14px; border-radius: 6px; }
     .meny nav a.logginn:hover { color: #000; background: #ffa733; }
     .burger { display: none; margin-left: auto; background: none; border: 0; color: #fff; font-size: 28px; cursor: pointer; padding: 4px 8px; }
 
-    @media (max-width: 1060px) {
+    @media (max-width: 1120px) {
       .meny .merke img.namn { display: none; }
       .burger { display: block; }
       .meny nav {
@@ -143,7 +143,8 @@
     @media (max-width: 760px) { .merke-liste { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
 
     /* Vener av klubben */
-    .vener { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; margin-top: 10px; }
+    .vener { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; margin-top: 10px; }
+    @media (max-width: 760px) { .vener { grid-template-columns: repeat(2, 1fr); gap: 10px; } .ven h3 { font-size: 16px; } }
     .ven { background: var(--kort); border-radius: 10px; padding: 14px; text-align: center; border-top: 4px solid var(--oransje); }
     .ven img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; border-radius: 6px; display: block; }
     .ven h3 { margin: 12px 0 2px; font-size: 19px; }
@@ -194,7 +195,7 @@
         <a href="#quiz">MC Quiz</a>
         <a href="#om">Om klubben</a>
         <a href="#torsdag">Torsdagskafé</a>
-        <a href="#vener">Vener av klubben</a>
+        <a href="#vener">Klubbar</a>
         <a href="#gjestebok">Gjestebok</a>
         <a href="#kontakt">Kontakt</a>
         <a class="logginn" href="medlem.html">Medlem? Logg inn</a>
@@ -303,13 +304,28 @@
 
   <section id="vener">
     <div class="inn">
-      <h2>Vener av klubben</h2>
-      <p class="ingress">Klubbar vi held kontakten med og støttar.</p>
+      <h2>Klubbar i nærområdet</h2>
+      <p class="ingress">Andre motorsykkelklubbar i nærområdet.</p>
       <div class="vener">
+        <div class="ven"><img src="vener/aalesund-mk.jpg" alt="Logoen til Aalesund Motorsykkelklubb"><h3>Aalesund Motorsykkelklubb</h3><p>Aalesund</p></div>
+        <div class="ven"><img src="vener/atlantic-riders-mc.jpg" alt="Logoen til Atlantic Riders MC"><h3>Atlantic Riders MC</h3></div>
         <div class="ven"><img src="vener/bjorkedal-mc.jpg" alt="Logoen til Bjørkedal MC"><h3>Bjørkedal MC</h3><p>Sunnmøre</p></div>
         <div class="ven"><img src="vener/eid-mc.jpg" alt="Ryggmerket til Eid MC"><h3>Eid MC</h3><p>Nordfjord</p></div>
-        <div class="ven"><img src="vener/skallagrim-mc.jpg" alt="Supportmerket til Skallagrim MC"><h3>Skallagrim MC</h3><p>Ørsta</p></div>
         <div class="ven"><img src="vener/fenris-mc.jpg" alt="Logoen til Fenris MC"><h3>Fenris MC</h3><p>North-West</p></div>
+        <div class="ven"><img src="vener/gange-rolv-hd-mc.jpg" alt="Logoen til Gange Rolv HD MC"><h3>Gange Rolv HD MC</h3><p>Aalesund</p></div>
+        <div class="ven"><img src="vener/hangover-mc.jpg" alt="Logoen til Hangover MC"><h3>Hangover MC</h3><p>N.W. Area</p></div>
+        <div class="ven"><img src="vener/headstone-mc.jpg" alt="Logoen til Headstone MC"><h3>Headstone MC</h3><p>Aalesund</p></div>
+        <div class="ven"><img src="vener/hod-mc.jpg" alt="Logoen til HOD MC"><h3>HOD MC</h3><p>Ulsteinvik</p></div>
+        <div class="ven"><img src="vener/moonshine-mc.jpg" alt="Logoen til Moonshine MC"><h3>Moonshine MC</h3><p>Romsdal</p></div>
+        <div class="ven"><img src="vener/red-wolf-mc.jpg" alt="Logoen til Red Wolf MC"><h3>Red Wolf MC</h3><p>Aalesund</p></div>
+        <div class="ven"><img src="vener/shakin-brains-mc.jpg" alt="Logoen til Shakin' Brains MC"><h3>Shakin' Brains MC</h3><p>Vestnes</p></div>
+        <div class="ven"><img src="vener/sioux-mc.jpg" alt="Logoen til Sioux MC"><h3>Sioux MC</h3><p>Sunndalsøra</p></div>
+        <div class="ven"><img src="vener/skallagrim-mc.jpg" alt="Supportmerket til Skallagrim MC"><h3>Skallagrim MC</h3><p>Ørsta</p></div>
+        <div class="ven"><img src="vener/snorre-mc.jpg" alt="Logoen til Snorre MC"><h3>Snorre MC</h3><p>Molde</p></div>
+        <div class="ven"><img src="vener/speed-hogs-mc.jpg" alt="Logoen til Speed Hogs MC"><h3>Speed Hogs MC</h3><p>Romsdal</p></div>
+        <div class="ven"><img src="vener/stallar-mc.jpg" alt="Logoen til Stallar MC"><h3>Stallar MC</h3><p>Søre-Sunnmøre</p></div>
+        <div class="ven"><img src="vener/thorsmen-mc.jpg" alt="Logoen til Thorsmen MC"><h3>Thorsmen MC</h3><p>Kristiansund</p></div>
+        <div class="ven"><img src="vener/twin-riders-mc.jpg" alt="Logoen til Twin Riders MC"><h3>Twin Riders MC</h3><p>Sykkylven</p></div>
       </div>
     </div>
   </section>
