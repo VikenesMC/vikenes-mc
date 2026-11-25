@@ -330,6 +330,7 @@
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
           <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
+          ${meg.role === "President" ? `<button data-fane="president" onclick="visFane('president')">President</button>` : ""}
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
                                <button data-fane="gjestebok" onclick="visFane('gjestebok')">Gjestebok<span id="g-tal"></span></button>` : ""}
         </div>
@@ -352,6 +353,7 @@
       if (f === "quiz") return visQuiz();
       if (f === "nyheiter") return visNyheiter();
       if (f === "gjestebok") return visGjestebok();
+      if (f === "president") return visPresident();
       try { liste = await rpc("member_list"); }
       catch (e) { return start(); }
       visMedlemmer();
@@ -387,13 +389,15 @@
     }
 
     async function visLeiarvarsel() {
-      if (!meg.leader) return;
+      if (!meg.leader && !meg.styre) return;
       try {
-        const l = await rpc("member_list");
-        const n = l.filter(m => m.status === "pending").length;
+        const n = meg.leader ? (await rpc("member_list")).filter(m => m.status === "pending").length : 0;
+        const s = meg.styre ? (await rpc("member_changes_open")).filter(x => x.can_vote && x.my_vote === null).length : 0;
+        const tekst = [n ? `${n} ventar på godkjenning` : "", s ? `${s} forslag til styret ventar på svaret ditt` : ""]
+          .filter(Boolean).join(" · ");
         const el = document.getElementById("leiarvarsel");
-        if (el && n) el.innerHTML = `<div class="kort" style="border-top-color:var(--gul); padding:12px 16px">
-          <span class="vars">${n} ventar på godkjenning</span>
+        if (el && tekst) el.innerHTML = `<div class="kort" style="border-top-color:var(--gul); padding:12px 16px">
+          <span class="vars">${tekst}</span>
           <button class="liten" style="margin-left:10px" onclick="visFane('medlemmer')">Sjå medlemmer</button></div>`;
       } catch (e) { /* ikkje kritisk */ }
     }
@@ -643,9 +647,7 @@
             <button onclick="sett('${m.id}', 'approved')">Godkjenn</button>
             <button class="sekundar" onclick="sett('${m.id}', 'removed', 'Avvise')">Avvis</button></div>`;
         } else if (m.status === "approved") {
-          knappar = `<div class="rad">${rolleVal(m.id, m.role)}
-            <button class="sekundar" onclick="sett('${m.id}', 'approved')">Lagre rolle</button>
-            <button class="fare" onclick="sett('${m.id}', 'removed', 'Fjerne')">Fjern</button></div>`;
+          knappar = `<button class="sekundar liten" style="margin-top:6px" onclick="visRediger('${m.id}')">✏️ Rediger</button>`;
         } else {
           knappar = `<div class="rad">${rolleVal(m.id, m.role)}
             <button class="sekundar" onclick="sett('${m.id}', 'approved')">Gje tilgang att</button></div>`;
@@ -653,7 +655,8 @@
       }
       return `<div class="medlem">
         <div class="namn">${esc(m.name)}${megSjolv ? ' <span class="dempa">(deg)</span>' : ""}</div>
-        <div class="rolle">${esc(m.role)}</div>
+        <div class="rolle">${esc(m.role)}${m.change ? ` <span class="merke" style="font-size:12px">Ventar på styret: ${
+          m.change.kind === "remove" ? "slette" : "ny tittel " + esc(m.change.new_role)}</span>` : ""}</div>
         <div class="info">${m.phone ? `<a href="tel:${esc(m.phone)}">${esc(visTlf(m.phone))}</a>` : ""}
           ${m.email ? " · " + esc(m.email) : ""}</div>
         ${knappar}
@@ -665,12 +668,7 @@
       const godkjende = liste.filter(m => m.status === "approved");
       const fjerna = liste.filter(m => m.status === "removed");
       document.getElementById("fane").innerHTML = `
-        ${meg.role === "President" ? `<div class="kort">
-          <h2 style="margin-top:0">Ny medlem</h2>
-          <p class="dempa" style="margin-top:0">Vis QR-koden på mobilen din. Den nye medlemmen skannar ho og lagar konto.
-            Koden gjeld i 24 timar, og du godkjenner medlemmen etterpå her.</p>
-          <button onclick="visInvitasjon()">📱 Vis QR-kode for ny medlem</button>
-        </div>` : ""}
+        ${meg.styre || meg.leader ? `<div id="forslag-boks"></div>` : ""}
         ${ventande.length ? `<div class="kort" style="border-top-color:var(--gul)">
           <h2 style="margin-top:0">Ventar på godkjenning</h2>
           <p class="dempa" style="margin-top:0">Vel rolle og trykk «Godkjenn».</p>
@@ -678,17 +676,114 @@
         <div class="kort">
           <h2 style="margin-top:0">Medlemmer (${godkjende.length})</h2>
           ${godkjende.map(medlemRad).join("") || '<p class="dempa">Ingen enno.</p>'}
-          ${meg.leader ? '<p class="dempa" style="font-size:14px">Du kan ikkje endre deg sjølv.</p>' : ""}
+          ${meg.leader ? '<p class="dempa" style="font-size:14px">Byte av tittel og sletting må godkjennast av heile styret. Du kan ikkje endre deg sjølv.</p>' : ""}
         </div>
-        ${meg.role === "President" ? `<div class="kort" id="tilgang-kort">
-          <h2 style="margin-top:0">Tilgang</h2>
-          <p class="dempa" style="margin-top:0">Huk av kven som slepp inn kvar. Endringa gjeld med ein gong.</p>
-          <div id="tilgang-liste" class="dempa">Lastar …</div>
-        </div>` : ""}
         ${fjerna.length ? `<div class="kort" style="border-top-color:#555">
           <h2 style="margin-top:0">Utan tilgang</h2>
           ${fjerna.map(medlemRad).join("")}</div>` : ""}`;
-      if (meg.role === "President") lastTilgang();
+      if (meg.styre || meg.leader) lastForslag("forslag-boks");
+    }
+
+    // ---------------- President ----------------
+    function visPresident() {
+      document.getElementById("fane").innerHTML = `
+        <div id="forslag-boks"></div>
+        <div class="kort">
+          <h2 style="margin-top:0">Ny medlem</h2>
+          <p class="dempa" style="margin-top:0">Vis QR-koden på mobilen din. Den nye medlemmen skannar ho og lagar konto.
+            Koden gjeld i 24 timar, og du godkjenner medlemmen etterpå under «Medlemmer».</p>
+          <button onclick="visInvitasjon()">📱 Vis QR-kode for ny medlem</button>
+        </div>
+        <div class="kort" id="tilgang-kort">
+          <h2 style="margin-top:0">Tilgang</h2>
+          <p class="dempa" style="margin-top:0">Huk av kven som slepp inn kvar. Endringa gjeld med ein gong.</p>
+          <div id="tilgang-liste" class="dempa">Lastar …</div>
+        </div>`;
+      lastForslag("forslag-boks", true);
+      lastTilgang();
+    }
+
+    // ---------------- Styregodkjenning ----------------
+    async function lastForslag(boksId, visTom) {
+      const boks = document.getElementById(boksId);
+      if (!boks) return;
+      let f;
+      try { f = await rpc("member_changes_open"); } catch (e) { return; }
+      if (!f.length) {
+        boks.innerHTML = visTom ? `<div class="kort"><h2 style="margin-top:0">Til styret</h2>
+          <p class="dempa" style="margin:0">Ingen forslag ventar på godkjenning.</p></div>` : "";
+        return;
+      }
+      boks.innerHTML = `<div class="kort" style="border-top-color:var(--gul)">
+        <h2 style="margin-top:0">Til styret (${f.length})</h2>
+        <p class="dempa" style="margin-top:0">Endringa trer i kraft når alle i styret har sagt ja. Éin nei stoppar ho.</p>
+        ${f.map(x => `<div class="medlem">
+          <div class="namn">${x.kind === "remove" ? "Slette " + esc(x.member_name)
+                                                  : esc(x.member_name) + ": " + esc(x.member_role) + " → " + esc(x.new_role)}</div>
+          <div class="info">Foreslått av ${esc(x.proposed_name || "–")}</div>
+          <div class="info">${x.voters.map(v => `${v.yes === true ? "✅" : v.yes === false ? "❌" : "⏳"} ${esc(v.name)}`).join(" · ")}</div>
+          <div class="rad" style="margin-top:6px">
+            ${x.can_vote ? `<button class="liten" onclick="svarForslag(${x.id}, true)" ${x.my_vote === true ? "disabled" : ""}>👍 Godkjenn</button>
+                            <button class="fare liten" onclick="svarForslag(${x.id}, false)">👎 Nei</button>` : ""}
+            ${x.can_cancel ? `<button class="sekundar liten" onclick="trekkForslag(${x.id})">Trekk forslaget</button>` : ""}
+          </div>
+        </div>`).join("")}
+      </div>`;
+    }
+
+    async function svarForslag(id, ja) {
+      if (!ja && !confirm("Seie nei? Då blir forslaget stoppa.")) return;
+      try {
+        const s = await rpc("member_change_vote", { p_change: id, p_yes: ja });
+        if (s === "applied") alert("Alle i styret har sagt ja – endringa er gjennomført.");
+        if (s === "rejected") alert("Forslaget er stoppa.");
+      } catch (e) { alert(e.message === "closed" ? "Forslaget er alt avgjort." : e.message); }
+      visFane(aktivFane);
+    }
+
+    async function trekkForslag(id) {
+      if (!confirm("Trekkje forslaget?")) return;
+      try { await rpc("member_change_cancel", { p_change: id }); } catch (e) { alert(e.message); }
+      visFane(aktivFane);
+    }
+
+    // Rediger-knappen: byte tittel eller slette (blir forslag til styret)
+    function visRediger(id) {
+      const m = liste.find(x => x.id === id);
+      if (!m) return;
+      const bak = document.createElement("div");
+      bak.className = "modal-bak";
+      bak.innerHTML = `<div class="modal" style="text-align:left">
+        <h2 style="margin-top:0">${esc(m.name)}</h2>
+        <p class="dempa" style="margin-top:0">No: ${esc(m.role)}</p>
+        <label for="rolle-${m.id}">Ny tittel</label>
+        ${rolleVal(m.id, m.role)}
+        <button style="margin-top:8px" onclick="foreslaa('${m.id}', 'role')">Send ny tittel til styret</button>
+        <hr style="border:0; border-top:1px solid #333; margin:18px 0">
+        <button class="fare" onclick="foreslaa('${m.id}', 'remove')">🗑️ Slett frå klubben</button>
+        <p class="dempa" style="font-size:13px">Personen mister tilgangen til medlemssida. Alle i styret må godkjenne først.</p>
+        <button class="sekundar stor" onclick="this.closest('.modal-bak').remove()">Lukk</button>
+      </div>`;
+      document.body.appendChild(bak);
+    }
+
+    async function foreslaa(id, kind) {
+      const m = liste.find(x => x.id === id);
+      const rolle = kind === "role" ? document.getElementById("rolle-" + id).value : null;
+      if (kind === "remove" && !confirm(`Foreslå å slette ${m.name} frå klubben?`)) return;
+      try {
+        const r = await rpc("member_change_propose", { p_member: id, p_kind: kind, p_role: rolle });
+        document.querySelector(".modal-bak")?.remove();
+        if (r.status === "applied") alert("Gjennomført (ingen andre i styret treng å godkjenne).");
+        else {
+          db.functions.invoke("chat-push", { body: { action: "styre", change_id: r.id } }).catch(() => {});
+          alert("Sendt til styret. Endringa trer i kraft når alle har godkjent.");
+        }
+      } catch (e) {
+        alert({ not_allowed: "Du har ikkje tilgang til medlemsregisteret.", not_self: "Du kan ikkje endre deg sjølv.",
+                same_role: "Personen har alt den tittelen." }[e.message] || e.message);
+      }
+      visFane("medlemmer");
     }
 
     // President: tilgangsregister – kven slepp inn kvar
