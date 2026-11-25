@@ -120,6 +120,7 @@
       <div class="under">Medlemssida</div>
     </div>
 
+    <div id="appbanner"></div>
     <div id="innhald"><p class="dempa">Lastar …</p></div>
   </div>
 
@@ -518,6 +519,51 @@
       if (error) return alert("Feil: " + error.message);
       alert(data.sendt ? "Testvarsel sendt – det skal kome om nokre sekund." : "Fann ingen eining å sende til. Prøv å slå på varsel på nytt.");
     }
+
+    // ---------------- Installer appen ----------------
+    // Android/Chrome: nettlesaren gir oss ein «installer»-hendings som vi viser som knapp.
+    // iPhone: Safari har ingen slik knapp, så vi viser korleis ein legg sida på heimeskjermen.
+    let installHending = null;
+    window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installHending = e; visAppBanner(); });
+    window.addEventListener("appinstalled", () => { installHending = null; visAppBanner(); });
+
+    function visAppBanner() {
+      const el = document.getElementById("appbanner");
+      if (!el) return;
+      const bedt = new URLSearchParams(location.search).has("app");
+      if (erApp) { el.innerHTML = ""; return; }
+      if (installHending) {
+        el.innerHTML = `<div class="kort" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
+          <img src="app-ikon.png" alt="" style="width:48px; height:48px; border-radius:12px">
+          <div style="flex:1"><b>Vikenes MC-appen</b><br><span class="dempa" style="font-size:14px">Legg medlemssida på heimeskjermen</span></div>
+          <button style="margin:0" onclick="installerApp()">📲 Installer</button></div>`;
+      } else if (erIOS && bedt) {
+        el.innerHTML = `<div class="kort" style="padding:14px 16px">
+          <b>📲 Installer Vikenes MC-appen på iPhone</b>
+          <ol style="margin:8px 0 0; padding-left:20px; font-size:15px">
+            <li>Opne sida i <b>Safari</b></li>
+            <li>Trykk på <b>Del</b>-knappen (firkanten med pil opp)</li>
+            <li>Vel <b>«Legg til på Heim-skjerm»</b> og trykk <b>Legg til</b></li>
+          </ol></div>`;
+      } else if (bedt) {
+        el.innerHTML = `<div class="kort" style="padding:14px 16px; font-size:15px">
+          <b>📲 Installer appen:</b> trykk på menyen <b>⋮</b> øvst i Chrome og vel <b>«Installer app»</b>
+          eller <b>«Legg til på startsida»</b>.</div>`;
+      } else {
+        el.innerHTML = "";
+      }
+    }
+
+    async function installerApp() {
+      if (!installHending) return;
+      installHending.prompt();
+      await installHending.userChoice;
+      installHending = null;
+      visAppBanner();
+    }
+    visAppBanner();
+    // Registrer service worker med ein gong, så nettlesaren reknar sida som ein app
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
     // Hald abonnementet oppdatert (t.d. etter at nettlesaren har fornya det)
     async function fornyAbonnement() {
