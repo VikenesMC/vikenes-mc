@@ -63,35 +63,29 @@
 
     /* ---------- Front ---------- */
     /* Gruppebiletet som svak bakgrunn, med info oppå */
+    /* Heile gruppebiletet synleg (same format som biletet), dempa, med namn øvst og knappar nedst */
     .front {
-      position: relative; overflow: hidden;
-      padding: 56px 16px 60px; text-align: center;
-      background: #000 url("gruppebilete.jpg") center 30% / cover no-repeat;
+      position: relative; overflow: hidden; text-align: center;
+      width: 100%; aspect-ratio: 1672 / 941; max-height: 86vh;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 28px 16px 30px;
+      background: #000 url("gruppebilete.jpg") center / cover no-repeat;
     }
     .front::before {
       content: ""; position: absolute; inset: 0;
-      background: linear-gradient(to bottom, rgba(0,0,0,.72), rgba(0,0,0,.82) 60%, rgba(0,0,0,.94));
+      background: linear-gradient(to bottom, rgba(0,0,0,.70) 0%, rgba(0,0,0,.45) 35%, rgba(0,0,0,.45) 70%, rgba(0,0,0,.75) 100%);
     }
     .front > * { position: relative; }
     .front h1 { margin: 0; line-height: 1; }
-    .front h1 img { height: 72px; width: auto; max-width: 92%; filter: drop-shadow(0 2px 6px rgba(0,0,0,.9)); }
-    .front .under { margin: 12px 0 34px; font-size: 20px; color: #ddd; }
-    .infokort { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; text-align: left; }
-    .infokort a.kortlenkje {
-      display: block; text-decoration: none; color: var(--tekst);
-      background: rgba(20,20,20,.82); border-top: 4px solid var(--oransje); border-radius: 10px;
-      padding: 20px; transition: transform .15s, background .15s;
-    }
-    .infokort a.kortlenkje:hover { transform: translateY(-3px); background: rgba(30,30,30,.92); }
-    .infokort .ikon { font-size: 28px; }
-    .infokort h3 { margin: 6px 0 8px; font-size: 20px; color: var(--oransje); }
-    .infokort p { margin: 0; color: #ddd; font-size: 16px; }
-    .infokort .meir { display: inline-block; margin-top: 12px; font-weight: bold; color: #fff; font-size: 15px; }
+    .front h1 img { height: clamp(60px, 10vw, 130px); width: auto; max-width: 94%; filter: drop-shadow(0 3px 8px rgba(0,0,0,.95)); }
+    .front .under { margin: 0 0 12px; font-size: clamp(16px, 1.8vw, 22px); color: #eee; text-shadow: 0 1px 6px #000, 0 0 2px #000; }
+    .front .knappar { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .front .knappar .knapp { box-shadow: 0 3px 12px rgba(0,0,0,.6); }
     @media (max-width: 760px) {
-      .front { padding: 34px 16px 40px; }
-      .front h1 img { height: 46px; }
-      .front .under { font-size: 17px; margin-bottom: 24px; }
-      .infokort { grid-template-columns: 1fr; gap: 12px; }
+      /* Mobil: høgare enn biletformatet så namn og knappar får plass (sidene blir litt skorne) */
+      .front { aspect-ratio: auto; min-height: 400px; padding: 22px 12px 22px; }
+      .front .knappar { gap: 8px; }
+      .front .knappar .knapp { padding: 11px 14px; font-size: 15px; }
     }
 
     .knapp {
@@ -174,27 +168,13 @@
 
   <div class="front" role="img" aria-label="Medlemmene i Vikenes MC framfor klubblogoen i lokalet">
     <h1><img src="vikenes-tekst.png" alt="Vikenes MC"></h1>
-    <p class="under">Motorsykkelklubb i Volda – sidan 2011</p>
-    <div class="infokort">
-      <a class="kortlenkje" href="#kontakt">
-        <div class="ikon">☕</div>
-        <h3>Torsdagskafé</h3>
-        <p>Torsdagar frå kl. 18:00 er de velkomne til kaffi og ein prat med gutta i klubben.
-          Vi sel is, brus og potetgull.</p>
-        <span class="meir">Finn oss →</span>
-      </a>
-      <a class="kortlenkje" href="#quiz">
-        <div class="ikon">🏍️</div>
-        <h3>MC Quiz</h3>
-        <p>Sosialt quizløp på motorsykkel i grupper. Neste løp blir sommaren 2027.</p>
-        <span class="meir">Les meir →</span>
-      </a>
-      <a class="kortlenkje" href="#om">
-        <div class="ikon">🔧</div>
-        <h3>Om klubben</h3>
-        <p>12 personar med felles interesse, og flotte lokale på Vikeneset i Volda.</p>
-        <span class="meir">Les meir →</span>
-      </a>
+    <div>
+      <p class="under">Motorsykkelklubb i Volda – sidan 2011</p>
+      <div class="knappar">
+        <a class="knapp" href="#torsdag">Torsdagskafé</a>
+        <a class="knapp" href="#quiz">MC Quiz</a>
+        <a class="knapp" href="#om">Om klubben</a>
+      </div>
     </div>
   </div>
   <div class="stripe"></div>
@@ -243,7 +223,7 @@
         <h2>Om klubben</h2>
         <p class="ingress">Vikenes MC starta i 2011. Klubben er 12 personar med felles interesse.</p>
         <p>Vi har flotte lokale på Vikeneset i Volda, med opphaldsrom, verkstad og lager.</p>
-        <div class="torsdag">
+        <div class="torsdag" id="torsdag">
           <b>☕ Torsdagskafé</b>
           Torsdagar frå kl. 18:00 er de velkomne til kaffi og ein prat med gutta i klubben.
           Vi sel is, brus og potetgull.
