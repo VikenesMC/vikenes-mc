@@ -250,6 +250,7 @@
         </div>
         <div class="faner2">
           <button data-fane="chat" onclick="visFane('chat')">Chat</button>
+          <button data-fane="arkiv" onclick="visFane('arkiv')">Arkiv</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
                                <button data-fane="gjestebok" onclick="visFane('gjestebok')">Gjestebok<span id="g-tal"></span></button>` : ""}
@@ -266,6 +267,7 @@
         b.classList.toggle("aktiv", b.dataset.fane === f));
       if (f !== "chat") stoppChat();
       if (f === "chat") return visChat();
+      if (f === "arkiv") return visArkiv();
       if (f === "nyheiter") return visNyheiter();
       if (f === "gjestebok") return visGjestebok();
       try { liste = await rpc("member_list"); }
@@ -613,6 +615,94 @@
       try { await rpc("news_delete", { p_id: id }); } catch (e) { alert(e.message); }
       redigerer = null;
       visNyheiter();
+    }
+
+    // ---------------- Arkiv / dokument ----------------
+    const MAPPER = [
+      { id: "reglar", namn: "📜 Retningslinjer / Reglar" },
+      { id: "vedtekter", namn: "⚖️ Vedtekter" },
+      { id: "hus-lokale", namn: "🏠 Hus / Lokale" },
+      { id: "arsmote", namn: "🗳️ Årsmøte" },
+      { id: "regnskap", namn: "💰 Regnskap", berreRegnskap: true },
+    ];
+    let aktivMappe = "reglar";
+
+    function kanSkrive(mappe) {
+      return mappe === "regnskap" ? !!meg.regnskap : !!meg.leader;
+    }
+    function storleik(b) {
+      if (!b && b !== 0) return "";
+      return b < 1024 * 1024 ? Math.max(1, Math.round(b / 1024)) + " kB" : (b / 1024 / 1024).toFixed(1).replace(".", ",") + " MB";
+    }
+
+    async function visArkiv() {
+      const mapper = MAPPER.filter(m => !m.berreRegnskap || meg.regnskap);
+      if (!mapper.some(m => m.id === aktivMappe)) aktivMappe = mapper[0].id;
+      document.getElementById("fane").innerHTML = `
+        <div class="kort">
+          <label for="mappeval" style="margin-top:0">Mappe</label>
+          <select id="mappeval" onchange="aktivMappe = this.value; visArkiv()">
+            ${mapper.map(m => `<option value="${m.id}" ${m.id === aktivMappe ? "selected" : ""}>${m.namn}</option>`).join("")}
+          </select>
+          ${kanSkrive(aktivMappe) ? `
+            <div style="margin-top:16px">
+              <label for="arkivfil" style="margin-top:0">Last opp dokument (maks 25 MB)</label>
+              <input type="file" id="arkivfil" multiple style="background:#222; color:#fff">
+              <button onclick="lastOppDok()">⬆️ Last opp</button>
+              <p id="arkivstatus" class="dempa" style="margin-bottom:0"></p>
+            </div>` : ""}
+        </div>
+        <div class="kort" id="dokliste"><p class="dempa">Lastar …</p></div>`;
+      let liste;
+      try { liste = await rpc("doc_list", { p_folder: aktivMappe }); }
+      catch (e) { document.getElementById("dokliste").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      document.getElementById("dokliste").innerHTML = liste.length ? liste.map(d => `
+        <div class="medlem">
+          <div class="namn">📄 ${esc(d.name)}</div>
+          <div class="info">${esc(storleik(d.size))} · ${esc(dato(d.created_at))}${d.uploader ? " · " + esc(d.uploader) : ""}</div>
+          <div class="rad">
+            <button class="liten" style="margin-top:8px" onclick="opneDok('${esc(d.path)}')">Opne</button>
+            ${kanSkrive(aktivMappe) ? `<button class="fare liten" style="margin-top:8px" onclick="slettDok(${d.id})">Slett</button>` : ""}
+          </div>
+        </div>`).join("") : '<p class="dempa" style="margin:0">Ingen dokument i denne mappa enno.</p>';
+    }
+
+    // Lagar eit trygt filnamn til lagringa (det ekte namnet blir lagra i lista)
+    function trygtNamn(n) {
+      return n.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[æÆ]/g, "ae").replace(/[øØ]/g, "o").replace(/[åÅ]/g, "a")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(-80) || "fil";
+    }
+
+    async function lastOppDok() {
+      const filer = [...document.getElementById("arkivfil").files];
+      const status = document.getElementById("arkivstatus");
+      if (!filer.length) { status.textContent = "Vel ei fil først."; return; }
+      for (const [i, f] of filer.entries()) {
+        if (f.size > 25 * 1024 * 1024) { alert(`«${f.name}» er større enn 25 MB og blir ikkje lasta opp.`); continue; }
+        status.textContent = `Lastar opp ${i + 1} av ${filer.length}: ${f.name} …`;
+        const sti = `${aktivMappe}/${Date.now()}-${trygtNamn(f.name)}`;
+        const { error } = await db.storage.from("arkiv").upload(sti, f, { contentType: f.type || "application/octet-stream" });
+        if (error) { alert(`Klarte ikkje å laste opp «${f.name}»: ${error.message}`); continue; }
+        try { await rpc("doc_add", { p_folder: aktivMappe, p_path: sti, p_name: f.name, p_size: f.size, p_mime: f.type }); }
+        catch (e) { await db.storage.from("arkiv").remove([sti]); alert(`Feil for «${f.name}»: ${e.message}`); }
+      }
+      visArkiv();
+    }
+
+    async function opneDok(sti) {
+      const vindauge = window.open("", "_blank");   // opnar fane med ein gong (elles blokkerer mobilen)
+      const { data, error } = await db.storage.from("arkiv").createSignedUrl(sti, 300);
+      if (error) { if (vindauge) vindauge.close(); return alert("Klarte ikkje å opne: " + error.message); }
+      if (vindauge) vindauge.location = data.signedUrl; else location.href = data.signedUrl;
+    }
+
+    async function slettDok(id) {
+      if (!confirm("Slette dokumentet for godt?")) return;
+      try {
+        const sti = await rpc("doc_delete", { p_id: id });
+        await db.storage.from("arkiv").remove([sti]);
+      } catch (e) { alert(e.message); }
+      visArkiv();
     }
 
     // ---------------- Gjestebok (President, Vice President, Secretary) ----------------
