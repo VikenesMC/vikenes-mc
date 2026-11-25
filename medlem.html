@@ -1350,7 +1350,7 @@
           <label for="r-tekst">Kva gjeld det?</label>
           <input id="r-tekst" maxlength="200" placeholder="t.d. Kaffi og vaflar, Rema 1000" value="${esc(p ? p.tekst : "")}">
           <label for="r-dato">Dato</label>
-          ${datoFelt("r-dato", p ? p.dato : idag())}
+          ${datoFelt("r-dato", p ? p.dato : idag(), true)}
           <label for="r-kvittering">Kvittering (bilete eller PDF)${p && p.kvittering_path ? " – har alt ei, vel ny for å byte" : ""}</label>
           <input id="r-kvittering" type="file" accept="image/*,application/pdf" style="background:#222; color:#fff">
           <div class="rad" style="margin-top:12px">
