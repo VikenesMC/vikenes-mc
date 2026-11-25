@@ -161,9 +161,8 @@
     .skriv select { width: 100%; padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid var(--linje); margin-bottom: 14px; background: #fff; color: #111; }
     #g-annan { margin-top: -6px; }
     /* Pokal med tal på klubbkortet */
-    .ven { position: relative; }
-    .ven .pokal { position: absolute; top: 18px; right: 18px; background: var(--oransje); color: #000; font-weight: bold;
-      border-radius: 20px; padding: 3px 9px; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+    .ven .pokal { display: inline-block; margin-top: 10px; background: var(--oransje); color: #000; font-weight: bold;
+      border-radius: 20px; padding: 3px 12px; font-size: 14px; }
     .helsing .klubb { color: var(--oransje); font-size: 14px; margin-left: 6px; }
     .skriv input, .skriv textarea {
       width: 100%; padding: 12px; font-size: 16px; font-family: inherit;
@@ -355,9 +354,9 @@
         <form class="skriv" onsubmit="sendHelsing(event)">
           <label for="g-namn">Namnet ditt</label>
           <input id="g-namn" maxlength="60" autocomplete="name" required>
-          <label for="g-klubb">Klubben din</label>
-          <select id="g-klubb" onchange="klubbEndra()"></select>
-          <input id="g-annan" maxlength="80" placeholder="Namnet på klubben" style="display:none">
+          <label for="g-klubb">Klubben din <span style="font-weight:normal; color:var(--dempa)">(vel frå lista eller skriv namnet)</span></label>
+          <input id="g-klubb" list="klubbliste" maxlength="80" autocomplete="off" placeholder="Skriv eller vel klubb …">
+          <datalist id="klubbliste"></datalist>
           <label class="kryss"><input type="checkbox" id="g-sjekkinn"> 🏆 Sjekk inn – vi er på besøk hos Vikenes MC</label>
           <label for="g-tekst">Helsing <span style="font-weight:normal; color:var(--dempa)">(valfritt om du sjekkar inn)</span></label>
           <textarea id="g-tekst" rows="4" maxlength="1000"></textarea>
@@ -458,17 +457,14 @@
       slug: klubbSlug(v), namn: v.querySelector("h3").textContent.trim(), el: v }));
 
     function fyllKlubbliste() {
-      const sel = document.getElementById("g-klubb");
-      sel.innerHTML = `<option value="">– Vel klubb –</option>` +
-        klubbar.map(k => `<option value="${esc(k.slug)}">${esc(k.namn)}</option>`).join("") +
-        `<option value="__annan">Annan klubb (skriv namnet)</option>
-         <option value="__ingen">Ingen klubb</option>`;
+      document.getElementById("klubbliste").innerHTML =
+        klubbar.map(k => `<option value="${esc(k.namn)}"></option>`).join("");
     }
-    function klubbEndra() {
-      const annan = document.getElementById("g-klubb").value === "__annan";
-      const felt = document.getElementById("g-annan");
-      felt.style.display = annan ? "block" : "none";
-      if (annan) felt.focus();
+    // Finn klubben på lista ut frå det som er skrive (bryr seg ikkje om store/små bokstavar, «MC» eller mellomrom)
+    function normKlubb(t) { return t.toLowerCase().replace(/\bmc\b|motorsykkelklubb|[^a-z0-9æøå]/g, ""); }
+    function finnKlubb(tekst) {
+      const n = normKlubb(tekst);
+      return n ? klubbar.find(k => normKlubb(k.namn) === n) : null;
     }
 
     async function lastPokalar() {
@@ -476,7 +472,7 @@
         const tal = await rpc("checkin_counts");
         for (const k of klubbar) {
           k.el.querySelector(".pokal")?.remove();
-          if (tal[k.slug]) k.el.insertAdjacentHTML("afterbegin",
+          if (tal[k.slug]) k.el.insertAdjacentHTML("beforeend",
             `<span class="pokal" title="Har sjekka inn hos Vikenes MC">🏆 ${tal[k.slug]}</span>`);
         }
       } catch (e) { /* ikkje kritisk */ }
@@ -488,13 +484,13 @@
       const knapp = ev.target.querySelector("button");
       const namn = document.getElementById("g-namn").value.trim();
       const tekst = document.getElementById("g-tekst").value.trim();
-      const val = document.getElementById("g-klubb").value;
+      const skrive = document.getElementById("g-klubb").value.trim();
       const sjekkInn = document.getElementById("g-sjekkinn").checked;
-      let slug = null, klubbnamn = null;
-      if (val === "__annan") klubbnamn = document.getElementById("g-annan").value.trim() || null;
-      else if (val && val !== "__ingen") { slug = val; klubbnamn = klubbar.find(k => k.slug === val)?.namn || null; }
+      const kjend = finnKlubb(skrive);
+      const slug = kjend ? kjend.slug : null;
+      const klubbnamn = kjend ? kjend.namn : (skrive || null);
       svar.className = "svar"; svar.textContent = "";
-      if (sjekkInn && !klubbnamn) { svar.textContent = "Vel klubben din (eller skriv namnet) for å sjekke inn."; svar.classList.add("feil"); return; }
+      if (sjekkInn && !klubbnamn) { svar.textContent = "Skriv eller vel klubben din for å sjekke inn."; svar.classList.add("feil"); return; }
       if (!sjekkInn && !tekst) { svar.textContent = "Skriv ei helsing, eller kryss av for å sjekke inn."; svar.classList.add("feil"); return; }
       knapp.disabled = true;
       try {
@@ -519,7 +515,7 @@
         }
         svar.textContent = melding;
         svar.classList.add(ok ? "ok" : "feil");
-        if (ok) { ev.target.reset(); klubbEndra(); if (sjekkInn) lastPokalar(); }
+        if (ok) { ev.target.reset(); if (sjekkInn) lastPokalar(); }
       } catch (e) {
         svar.textContent = "Noko gjekk gale. Prøv igjen.";
         svar.classList.add("feil");
