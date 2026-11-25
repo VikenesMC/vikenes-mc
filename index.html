@@ -136,6 +136,12 @@
     .om img { width: 100%; filter: drop-shadow(0 0 2px rgba(255,255,255,.5)); }
     @media (max-width: 760px) { .om { grid-template-columns: 1fr; } .om img { max-width: 200px; margin: 0 auto; display: block; } }
 
+    /* Medlemmene som kvite merke, som på vesten */
+    .medlemstittel { margin: 34px 0 14px; font-size: 20px; text-transform: uppercase; letter-spacing: 2px; color: var(--oransje); }
+    .merke-liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+    .merke-liste img { width: 100%; height: auto; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+    @media (max-width: 760px) { .merke-liste { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
+
     /* Vener av klubben */
     .vener { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; margin-top: 10px; }
     .ven { background: var(--kort); border-radius: 10px; padding: 14px; text-align: center; border-top: 4px solid var(--oransje); }
@@ -260,6 +266,23 @@
         <p class="ingress">Vi har flotte lokale på Vikeneset i Volda, med opphaldsrom, verkstad og lager.</p>
       </div>
       <img src="logo.png" alt="Klubblogoen til Vikenes MC">
+    </div>
+    <div class="inn">
+      <h3 class="medlemstittel">Medlemmene</h3>
+      <div class="merke-liste">
+        <img src="medlemmer/kay-robot.png" alt="Kay Robot">
+        <img src="medlemmer/idar.png" alt="Idar">
+        <img src="medlemmer/lennart.png" alt="Lennart">
+        <img src="medlemmer/stig.png" alt="Stig">
+        <img src="medlemmer/henning.png" alt="Henning">
+        <img src="medlemmer/tor-james.png" alt="Tor James">
+        <img src="medlemmer/kjell.png" alt="Kjell">
+        <img src="medlemmer/sjur.png" alt="Sjur">
+        <img src="medlemmer/bjorn-tore.png" alt="Bjørn Tore">
+        <img src="medlemmer/andreas.png" alt="Andreas">
+        <img src="medlemmer/even.png" alt="Even">
+        <img src="medlemmer/kristian.png" alt="Kristian">
+      </div>
     </div>
   </section>
 
