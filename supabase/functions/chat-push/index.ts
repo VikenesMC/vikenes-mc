@@ -4,6 +4,7 @@
 // action "key"  → gir den offentlege VAPID-nøkkelen (lagar nøklane første gong)
 // action "send" → sender varsel om melding <message_id> til alle andre medlemmer
 // action "test" → sender eit testvarsel til den som spør (eigne einingar)
+// action "styre" → varsel til styret om nytt forslag <change_id> i medlemsregisteret
 //
 // VAPID-nøklane blir laga her og lagra i tabellen push_config, som berre
 // service role kan lese. Ingen treng å skrive inn hemmelege nøklar for hand.
@@ -80,6 +81,21 @@ Deno.serve(async (req) => {
       mottakarar = (data ?? []).filter((s) => ok.has(s.member_id));
       const tekst = melding.body.length > 180 ? melding.body.slice(0, 180) + " …" : melding.body;
       innhald = { title: meg.name, body: tekst, url: "medlem.html", tag: "chat" };
+    } else if (inn.action === "styre") {
+      // Nytt forslag i medlemsregisteret → varsel til styret (ikkje den som foreslo / den det gjeld)
+      const { data: f } = await db.from("member_changes")
+        .select("id, member_id, kind, new_role, proposed_by, status, created_at").eq("id", Number(inn.change_id)).maybeSingle();
+      if (!f || f.proposed_by !== user.id || f.status !== "open") return svar({ error: "not_found" }, 404);
+      if (Date.now() - new Date(f.created_at).getTime() > 5 * 60 * 1000) return svar({ error: "too_old" }, 400);
+      const { data: styret } = await db.from("members").select("id").eq("status", "approved")
+        .in("role", ["President", "Vice President", "Treasurer", "Board Member"]);
+      const ok = new Set((styret ?? []).map((m) => m.id).filter((id) => id !== user.id && id !== f.member_id));
+      const { data } = await db.from("push_subscriptions").select("endpoint, p256dh, auth, member_id");
+      mottakarar = (data ?? []).filter((s) => ok.has(s.member_id));
+      const { data: mal } = await db.from("members").select("name").eq("id", f.member_id).maybeSingle();
+      const kva = f.kind === "remove" ? `å slette ${mal?.name}` : `${mal?.name} som ${f.new_role}`;
+      innhald = { title: "Styret: godkjenning", body: `${meg.name} foreslår ${kva}. Opne appen og svar.`,
+                  url: "medlem.html", tag: "styre-" + f.id };
     } else {
       return svar({ error: "bad_action" }, 400);
     }
