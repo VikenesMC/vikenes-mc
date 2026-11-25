@@ -36,6 +36,27 @@
     .medlem-topp img.oe { height: 44px; margin: 6px auto 0; display: block; }
     .medlem-topp .under { color: var(--dempa); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
     .kort, .chatlogg, .varselboks { background: rgba(26,26,26,.92); }
+
+    /* ---------- Regnskap ---------- */
+    .saldoar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .saldo { background: #222; border-radius: 8px; padding: 12px; font-size: 14px; }
+    .saldo h3 { margin: 0 0 6px; color: var(--oransje); font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+    .saldo .linje { display: flex; justify-content: space-between; }
+    .saldo .sum { font-size: 18px; font-weight: bold; border-top: 1px solid #444; margin-top: 6px; padding-top: 6px; }
+    .innut { display: flex; gap: 8px; margin-top: 6px; }
+    .innut label { flex: 1; margin: 0; background: #333; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; }
+    .innut input { display: none; }
+    .innut input:checked + span { color: #000; }
+    .innut label:has(input:checked) { background: var(--oransje); color: #000; }
+    .post { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 0; border-bottom: 1px solid var(--linje); }
+    .post:last-child { border-bottom: 0; }
+    .post .tekst { font-weight: bold; }
+    .post .belop { font-weight: bold; text-align: right; white-space: nowrap; }
+    .post .belop.inn { color: var(--gronn); }
+    .post .belop.ut { color: var(--raud); }
+    .post .meta { color: var(--dempa); font-size: 14px; }
+    .post .rad button { margin-top: 6px; }
+    @media (max-width: 480px) { .saldoar { grid-template-columns: 1fr; } }
     .faner2 button.aktiv { background: var(--oransje); color: #000; }
     .medlem { padding: 12px 0; border-bottom: 1px solid var(--linje); }
     .medlem:last-child { border-bottom: 0; }
@@ -251,6 +272,7 @@
         <div class="faner2">
           <button data-fane="chat" onclick="visFane('chat')">Chat</button>
           <button data-fane="arkiv" onclick="visFane('arkiv')">Arkiv</button>
+          ${meg.regnskap ? `<button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>` : ""}
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
                                <button data-fane="gjestebok" onclick="visFane('gjestebok')">Gjestebok<span id="g-tal"></span></button>` : ""}
@@ -268,6 +290,7 @@
       if (f !== "chat") stoppChat();
       if (f === "chat") return visChat();
       if (f === "arkiv") return visArkiv();
+      if (f === "regnskap") return visRegnskap();
       if (f === "nyheiter") return visNyheiter();
       if (f === "gjestebok") return visGjestebok();
       try { liste = await rpc("member_list"); }
@@ -703,6 +726,195 @@
         await db.storage.from("arkiv").remove([sti]);
       } catch (e) { alert(e.message); }
       visArkiv();
+    }
+
+    // ---------------- Regnskap (President og Treasurer) ----------------
+    let regnAr = new Date().getFullYear();
+    let regnData = null;
+    let regnRediger = null;   // posten som blir endra, eller null
+    const KONTO = { bank: "Bank", kontant: "Kontant" };
+
+    function kr(n) {
+      return Number(n).toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
+    }
+    function idag() { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+    function datoKort(iso) { const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; }
+
+    async function visRegnskap() {
+      try { regnData = await rpc("ledger_year", { p_year: regnAr }); }
+      catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const r = regnData, p = regnRediger;
+      const saldo = k => {
+        const s = r.kontoar[k];
+        return `<div class="saldo"><h3>${KONTO[k]}</h3>
+          <div class="linje"><span>Inngåande 1.1.</span><span>${kr(s.inn_saldo)}</span></div>
+          <div class="linje"><span>Inn ${r.year}</span><span style="color:var(--gronn)">${kr(s.inn)}</span></div>
+          <div class="linje"><span>Ut ${r.year}</span><span style="color:var(--raud)">${kr(s.ut)}</span></div>
+          <div class="linje sum"><span>Saldo 31.12.</span><span>${kr(s.ut_saldo)}</span></div></div>`;
+      };
+      document.getElementById("fane").innerHTML = `
+        <div class="kort">
+          <div class="rad" style="justify-content:space-between">
+            <select style="width:auto; margin:0" onchange="regnAr = +this.value; regnRediger = null; visRegnskap()">
+              ${r.years.map(y => `<option ${y === r.year ? "selected" : ""}>${y}</option>`).join("")}
+            </select>
+            <div class="rad">
+              <button class="sekundar liten" onclick="lastNedRegnskap()">📥 Excel (CSV)</button>
+              <button class="sekundar liten" onclick="skrivUtRegnskap()">🖨️ Skriv ut</button>
+            </div>
+          </div>
+          <div class="saldoar" style="margin-top:12px">${saldo("bank")}${saldo("kontant")}</div>
+        </div>
+
+        <div class="kort" id="regnskjema">
+          <h2 style="margin-top:0">${p ? "Endre post" : "Ny post"}</h2>
+          <div class="innut">
+            <label><input type="radio" name="r-type" value="inn" ${p && p.belop > 0 ? "checked" : ""}><span>➕ Inn</span></label>
+            <label><input type="radio" name="r-type" value="ut" ${!p || p.belop < 0 ? "checked" : ""}><span>➖ Ut</span></label>
+          </div>
+          <label for="r-belop">Beløp (kr)</label>
+          <input id="r-belop" inputmode="decimal" placeholder="t.d. 249,90" value="${p ? String(Math.abs(p.belop)).replace(".", ",") : ""}">
+          <label for="r-tekst">Kva gjeld det?</label>
+          <input id="r-tekst" maxlength="200" placeholder="t.d. Kaffi og vaflar, Rema 1000" value="${esc(p ? p.tekst : "")}">
+          <div class="rad" style="align-items:flex-start">
+            <div style="flex:1; min-width:140px">
+              <label for="r-dato">Dato</label>
+              <input id="r-dato" type="date" value="${p ? p.dato : idag()}">
+            </div>
+            <div style="flex:1; min-width:140px">
+              <label for="r-konto">Konto</label>
+              <select id="r-konto">${Object.entries(KONTO).map(([k, n]) =>
+                `<option value="${k}" ${(p ? p.konto : "bank") === k ? "selected" : ""}>${n}</option>`).join("")}</select>
+            </div>
+          </div>
+          <label for="r-kvittering">Kvittering (bilete eller PDF)${p && p.kvittering_path ? " – har alt ei, vel ny for å byte" : ""}</label>
+          <input id="r-kvittering" type="file" accept="image/*,application/pdf" style="background:#222; color:#fff">
+          <div class="rad" style="margin-top:12px">
+            <button onclick="lagrePost()">💾 Lagre</button>
+            ${p ? `<button class="sekundar" onclick="regnRediger = null; visRegnskap()">Avbryt</button>` : ""}
+          </div>
+          <p id="r-melding" class="feil" style="margin-bottom:0"></p>
+        </div>
+
+        <div class="kort">
+          <h2 style="margin-top:0">Postar ${r.year} (${r.postar.length})</h2>
+          ${r.postar.map(x => `
+            <div class="post">
+              <div class="tekst">${esc(x.tekst)}</div>
+              <div class="belop ${x.belop > 0 ? "inn" : "ut"}">${x.belop > 0 ? "+" : "−"} ${kr(Math.abs(x.belop))}</div>
+              <div class="meta">${datoKort(x.dato)} · ${KONTO[x.konto]}${x.created_name ? " · " + esc(x.created_name) : ""}</div>
+              <div class="meta" style="text-align:right">${x.kvittering_path ? "📎 kvittering" : "⚠️ manglar kvittering"}</div>
+              <div class="rad" style="grid-column: 1 / -1">
+                ${x.kvittering_path ? `<button class="liten" onclick="opneDok('${esc(x.kvittering_path)}')">Sjå kvittering</button>` : ""}
+                <button class="sekundar liten" onclick="redigerPost(${x.id})">Endre</button>
+                <button class="fare liten" onclick="slettPost(${x.id})">Slett</button>
+              </div>
+            </div>`).join("") || '<p class="dempa" style="margin:0">Ingen postar i år enno.</p>'}
+        </div>`;
+    }
+
+    function redigerPost(id) {
+      regnRediger = regnData.postar.find(x => x.id === id) || null;
+      visRegnskap().then(() => document.getElementById("regnskjema").scrollIntoView({ behavior: "smooth" }));
+    }
+
+    // Gjer store mobilbilete mindre (maks 1800 px) så lagringsplassen held lenge
+    async function krympBilete(fil) {
+      if (!fil.type.startsWith("image/") || fil.size < 1.2 * 1024 * 1024) return fil;
+      try {
+        const bmp = await createImageBitmap(fil);
+        const k = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+        c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+        const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.82));
+        return blob ? new File([blob], fil.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : fil;
+      } catch (e) { return fil; }
+    }
+
+    async function lagrePost() {
+      const feil = t => { document.getElementById("r-melding").textContent = t; };
+      const type = document.querySelector('input[name="r-type"]:checked')?.value;
+      const belop = parseFloat(document.getElementById("r-belop").value.replace(/\s/g, "").replace(",", "."));
+      const tekst = document.getElementById("r-tekst").value.trim();
+      const dato = document.getElementById("r-dato").value;
+      const konto = document.getElementById("r-konto").value;
+      let fil = document.getElementById("r-kvittering").files[0];
+      if (!type) return feil("Vel Inn eller Ut.");
+      if (!(belop > 0)) return feil("Skriv eit beløp større enn 0.");
+      if (tekst.length < 2) return feil("Skriv kva posten gjeld.");
+      if (!dato) return feil("Vel dato.");
+      feil("Lagrar …");
+      let sti = null, namn = null;
+      if (fil) {
+        fil = await krympBilete(fil);
+        if (fil.size > 25 * 1024 * 1024) return feil("Kvitteringa er større enn 25 MB.");
+        sti = `regnskap/kvitteringar/${Date.now()}-${trygtNamn(fil.name)}`;
+        namn = fil.name;
+        const { error } = await db.storage.from("arkiv").upload(sti, fil, { contentType: fil.type || "application/octet-stream" });
+        if (error) return feil("Klarte ikkje å laste opp kvitteringa: " + error.message);
+      }
+      const gammal = regnRediger && sti ? regnRediger.kvittering_path : null;
+      try {
+        await rpc("ledger_save", { p_id: regnRediger ? regnRediger.id : null, p_dato: dato, p_konto: konto, p_tekst: tekst,
+          p_belop: type === "ut" ? -belop : belop, p_kvittering_path: sti, p_kvittering_namn: namn });
+      } catch (e) {
+        if (sti) await db.storage.from("arkiv").remove([sti]);
+        return feil({ bad_amount: "Ugyldig beløp.", bad_text: "Teksten må vere 2–200 teikn.", not_allowed: "Berre President og Treasurer kan føre regnskap." }[e.message] || e.message);
+      }
+      if (gammal) await db.storage.from("arkiv").remove([gammal]);
+      regnAr = +dato.slice(0, 4);
+      regnRediger = null;
+      visRegnskap();
+    }
+
+    async function slettPost(id) {
+      const x = regnData.postar.find(p => p.id === id);
+      if (!confirm(`Slette «${x ? x.tekst : "posten"}» for godt? Kvitteringa blir òg sletta.`)) return;
+      try {
+        const sti = await rpc("ledger_delete", { p_id: id });
+        if (sti) await db.storage.from("arkiv").remove([sti]);
+      } catch (e) { alert(e.message); }
+      visRegnskap();
+    }
+
+    function lastNedRegnskap() {
+      const r = regnData;
+      const csvFelt = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const tal = n => Number(n).toFixed(2).replace(".", ",");
+      const linjer = [["Dato", "Konto", "Tekst", "Inn", "Ut", "Kvittering", "Ført av"].map(csvFelt).join(";")];
+      for (const x of [...r.postar].reverse()) {
+        linjer.push([datoKort(x.dato), KONTO[x.konto], x.tekst, x.belop > 0 ? tal(x.belop) : "", x.belop < 0 ? tal(-x.belop) : "",
+                     x.kvittering_namn || (x.kvittering_path ? "ja" : "MANGLAR"), x.created_name || ""].map(csvFelt).join(";"));
+      }
+      linjer.push("");
+      for (const k of ["bank", "kontant"]) {
+        const s = r.kontoar[k];
+        linjer.push([`${KONTO[k]}: inngåande ${tal(s.inn_saldo)}`, `inn ${tal(s.inn)}`, `ut ${tal(-s.ut)}`, `saldo 31.12. ${tal(s.ut_saldo)}`].map(csvFelt).join(";"));
+      }
+      const blob = new Blob(["﻿" + linjer.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = `regnskap-vikenes-mc-${r.year}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    function skrivUtRegnskap() {
+      const r = regnData;
+      const rader = [...r.postar].reverse().map(x => `<tr><td>${datoKort(x.dato)}</td><td>${KONTO[x.konto]}</td><td>${esc(x.tekst)}</td>
+        <td class="t">${x.belop > 0 ? kr(x.belop) : ""}</td><td class="t">${x.belop < 0 ? kr(-x.belop) : ""}</td>
+        <td>${x.kvittering_path ? "✔" : "MANGLAR"}</td></tr>`).join("");
+      const saldo = ["bank", "kontant"].map(k => { const s = r.kontoar[k];
+        return `<tr><td>${KONTO[k]}</td><td class="t">${kr(s.inn_saldo)}</td><td class="t">${kr(s.inn)}</td><td class="t">${kr(-s.ut)}</td><td class="t"><b>${kr(s.ut_saldo)}</b></td></tr>`; }).join("");
+      const w = window.open("", "_blank");
+      if (!w) return alert("Nettlesaren stoppa utskriftsvindauget. Tillat sprettoppvindauge og prøv igjen.");
+      w.document.write(`<!DOCTYPE html><html lang="no"><head><meta charset="utf-8"><title>Regnskap Vikenes MC ${r.year}</title>
+        <style>body{font-family:Arial,sans-serif;margin:24px;color:#000} h1{margin:0 0 4px} table{border-collapse:collapse;width:100%;margin:12px 0 24px;font-size:13px}
+        th,td{border:1px solid #999;padding:5px 7px;text-align:left} th{background:#eee} .t{text-align:right;white-space:nowrap}</style></head><body>
+        <h1>Regnskap – Vikenes MC</h1><div>År ${r.year} · utskrive ${datoKort(idag())}</div>
+        <h2>Saldo</h2><table><tr><th>Konto</th><th>Inngåande 1.1.</th><th>Inn</th><th>Ut</th><th>Saldo 31.12.</th></tr>${saldo}</table>
+        <h2>Postar</h2><table><tr><th>Dato</th><th>Konto</th><th>Tekst</th><th>Inn</th><th>Ut</th><th>Kvittering</th></tr>${rader}</table>
+        <script>window.onload=()=>window.print()<\/script></body></html>`);
+      w.document.close();
     }
 
     // ---------------- Gjestebok (President, Vice President, Secretary) ----------------
