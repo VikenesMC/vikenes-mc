@@ -125,6 +125,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>window.AUTH_LAGER = "vmc-medlem";</script>
   <script src="felles.js"></script>
   <script>
@@ -165,23 +166,38 @@
     }
 
     // ---------------- Innlogging / ny konto ----------------
-    function visInnlogging(melding) {
-      const inn = innloggingsFane === "inn";
+    // Nye medlemmer kjem berre inn via QR-kode som President viser (medlem.html?ny=<kode>)
+    const invitasjon = new URLSearchParams(location.search).get("ny");
+
+    async function visInnlogging(melding) {
+      visAppBanner();
+      if (invitasjon) {
+        let ok = false;
+        try { ok = await rpc("invite_valid", { p_token: invitasjon }); } catch (e) { /* vist under */ }
+        if (!ok) {
+          return vis(`<div class="kort"><h2 style="margin-top:0">QR-koden er ikkje gyldig</h2>
+            <p>Koden er gått ut eller feil. Be President om å vise ein ny QR-kode.</p>
+            <a class="dempa" href="medlem.html">Har du alt konto? Logg inn her</a></div>`);
+        }
+      }
+      const ny = !!invitasjon;
       vis(`
-        <div class="faner2">
-          <button class="${inn ? "aktiv" : ""}" onclick="innloggingsFane='inn'; visInnlogging()">Logg inn</button>
-          <button class="${inn ? "" : "aktiv"}" onclick="innloggingsFane='ny'; visInnlogging()">Ny medlem</button>
+        <div class="kort" style="text-align:center; padding:14px 16px">
+          <b>🔒 Berre for medlemmer i Vikenes MC</b>
+          <div class="dempa" style="font-size:14px; margin-top:4px">${ny
+            ? "Du er invitert av President. Lag kontoen din under."
+            : "Nye medlemmer får tilgang via President."}</div>
         </div>
         <div class="kort">
-          ${inn ? `
-            <label for="epost">E-post</label>
+          ${!ny ? `
+            <label for="epost" style="margin-top:0">E-post</label>
             <input id="epost" type="email" autocomplete="username">
             <label for="passord">Passord</label>
             <input id="passord" type="password" autocomplete="current-password">
             <button class="stor" onclick="loggInn()">Logg inn</button>
           ` : `
-            <p class="dempa" style="margin-top:0">Lag konto her. Du kjem inn når President eller
-              Vice President har godkjent deg.</p>
+            <h2 style="margin-top:0">Ny medlem</h2>
+            <p class="dempa" style="margin-top:0">Du kjem inn når President eller Vice President har godkjent deg.</p>
             <label for="namn">Fullt namn</label>
             <input id="namn" autocomplete="name">
             <label for="tlf">Mobilnummer</label>
@@ -219,7 +235,7 @@
 
       const { data, error } = await db.auth.signUp({ email, password });
       if (error) {
-        if (/registered|exists/i.test(error.message)) return feil("Denne e-posten har alt ein konto. Bruk «Logg inn».");
+        if (/registered|exists/i.test(error.message)) return feil("Denne e-posten har alt ein konto. Logg inn på medlemssida i staden.");
         return feil("Kunne ikkje lage konto: " + error.message);
       }
       if (!data.session) {
@@ -230,8 +246,9 @@
 
     async function registrer(namn, tlf) {
       let svar;
-      try { svar = await rpc("member_register", { p_name: namn, p_phone: tlf }); }
+      try { svar = await rpc("member_register", { p_name: namn, p_phone: tlf, p_token: invitasjon }); }
       catch (e) { return feil("Noko gjekk gale: " + e.message); }
+      if (svar.status === "bad_invite") return feil("QR-koden er gått ut. Be President om ein ny.");
       if (svar.status === "bad_name") return feil("Skriv inn namnet ditt.");
       if (svar.status === "bad_phone") return feil("Mobilnummeret må vere 8 siffer.");
       if (svar.status === "phone_exists") return feil("Dette mobilnummeret er alt registrert på ein annan konto.");
@@ -240,6 +257,11 @@
 
     // Innlogga, men ikkje i registeret (t.d. registreringa vart avbroten)
     function visFullfor() {
+      if (!invitasjon) {
+        return vis(`<div class="kort"><h2 style="margin-top:0">Berre for medlemmer i Vikenes MC</h2>
+          <p>Denne kontoen er ikkje i medlemsregisteret. Nye medlemmer blir lagde til via QR-kode frå President.</p>
+          <button class="sekundar" onclick="loggUt()">Logg ut</button></div>`);
+      }
       vis(`
         <div class="kort">
           <h2 style="margin-top:0">Fullfør registreringa</h2>
@@ -310,6 +332,7 @@
       visFane(aktivFane);
       if (meg.news_writer) oppdaterGjestetal();
       fornyAbonnement();
+      visAppBanner();
     }
 
     async function visFane(f) {
@@ -531,7 +554,8 @@
       const el = document.getElementById("appbanner");
       if (!el) return;
       const bedt = new URLSearchParams(location.search).has("app");
-      if (erApp) { el.innerHTML = ""; return; }
+      // Berre innlogga, godkjende medlemmer blir oppmoda om å installere appen
+      if (erApp || !meg || meg.status !== "approved") { el.innerHTML = ""; return; }
       if (installHending) {
         el.innerHTML = `<div class="kort" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
           <img src="app-ikon.png" alt="" style="width:48px; height:48px; border-radius:12px">
@@ -613,6 +637,12 @@
       const godkjende = liste.filter(m => m.status === "approved");
       const fjerna = liste.filter(m => m.status === "removed");
       document.getElementById("fane").innerHTML = `
+        ${meg.role === "President" ? `<div class="kort">
+          <h2 style="margin-top:0">Ny medlem</h2>
+          <p class="dempa" style="margin-top:0">Vis QR-koden på mobilen din. Den nye medlemmen skannar ho og lagar konto.
+            Koden gjeld i 24 timar, og du godkjenner medlemmen etterpå her.</p>
+          <button onclick="visInvitasjon()">📱 Vis QR-kode for ny medlem</button>
+        </div>` : ""}
         ${ventande.length ? `<div class="kort" style="border-top-color:var(--gul)">
           <h2 style="margin-top:0">Ventar på godkjenning</h2>
           <p class="dempa" style="margin-top:0">Vel rolle og trykk «Godkjenn».</p>
@@ -625,6 +655,25 @@
         ${fjerna.length ? `<div class="kort" style="border-top-color:#555">
           <h2 style="margin-top:0">Utan tilgang</h2>
           ${fjerna.map(medlemRad).join("")}</div>` : ""}`;
+    }
+
+    // President: vis QR-kode som nye medlemmer skannar for å lage konto
+    async function visInvitasjon() {
+      let inv;
+      try { inv = await rpc("invite_create"); }
+      catch (e) { return alert(e.message === "not_allowed" ? "Berre President kan lage QR-kode for nye medlemmer." : e.message); }
+      const url = BASE_URL + "medlem.html?ny=" + encodeURIComponent(inv.token);
+      const bak = document.createElement("div");
+      bak.className = "modal-bak";
+      bak.innerHTML = `<div class="modal">
+        <h2 style="margin-top:0">Ny medlem i Vikenes MC</h2>
+        <p class="dempa" style="margin:0">Skann med mobilkameraet</p>
+        <div class="qr-boks" id="inv-qr"></div>
+        <p class="dempa" style="font-size:14px">Gjeld til ${new Date(inv.expires_at).toLocaleString("nb-NO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>
+        <button class="stor" onclick="this.closest('.modal-bak').remove()">Lukk</button>
+      </div>`;
+      document.body.appendChild(bak);
+      new QRCode(document.getElementById("inv-qr"), { text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
     }
 
     async function sett(id, status, verb) {
