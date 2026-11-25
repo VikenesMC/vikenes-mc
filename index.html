@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vikenes MC – motorsykkelklubb i Volda</title>
-  <meta name="description" content="Vikenes MC er ein motorsykkelklubb i Volda, stifta i 2011. Nyheiter, MC Quiz og kontakt.">
+  <meta name="description" content="Vikenes MC er ein motorsykkelklubb i Volda, starta i 2011. Torsdagskafé, MC Quiz og nyheiter.">
 
   <!-- Korleis sida ser ut når ho blir delt på Facebook -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="Vikenes MC – motorsykkelklubb i Volda">
-  <meta property="og:description" content="Nyheiter, MC Quiz og kaffi med gutta på torsdagar.">
+  <meta property="og:description" content="Torsdagskafé frå kl. 18:00, MC Quiz og nyheiter frå klubben.">
   <meta property="og:url" content="https://vikenesmc.no/">
   <meta property="og:image" content="https://vikenesmc.no/gruppebilete.jpg">
   <meta property="og:locale" content="nn_NO">
@@ -62,18 +62,36 @@
     }
 
     /* ---------- Front ---------- */
-    .front { position: relative; background: #000; }
-    .front img.bilete { display: block; width: 100%; height: auto; max-height: 78vh; object-fit: cover; object-position: center 20%; }
-    /* Teksten ligg under biletet, så ingen andlet blir dekte */
-    .front .tekst { padding: 22px 16px 30px; text-align: center; background: #000; }
+    /* Gruppebiletet som svak bakgrunn, med info oppå */
+    .front {
+      position: relative; overflow: hidden;
+      padding: 56px 16px 60px; text-align: center;
+      background: #000 url("gruppebilete.jpg") center 30% / cover no-repeat;
+    }
+    .front::before {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,.72), rgba(0,0,0,.82) 60%, rgba(0,0,0,.94));
+    }
+    .front > * { position: relative; }
     .front h1 { margin: 0; line-height: 1; }
-    .front h1 img { height: 64px; width: auto; max-width: 92%; filter: drop-shadow(0 2px 6px rgba(0,0,0,.9)); }
-    .front p { margin: 10px 0 0; font-size: 19px; color: #ddd; text-shadow: 0 1px 4px #000; }
-    .front .knappar { margin-top: 18px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .front h1 img { height: 72px; width: auto; max-width: 92%; filter: drop-shadow(0 2px 6px rgba(0,0,0,.9)); }
+    .front .under { margin: 12px 0 34px; font-size: 20px; color: #ddd; }
+    .infokort { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; text-align: left; }
+    .infokort a.kortlenkje {
+      display: block; text-decoration: none; color: var(--tekst);
+      background: rgba(20,20,20,.82); border-top: 4px solid var(--oransje); border-radius: 10px;
+      padding: 20px; transition: transform .15s, background .15s;
+    }
+    .infokort a.kortlenkje:hover { transform: translateY(-3px); background: rgba(30,30,30,.92); }
+    .infokort .ikon { font-size: 28px; }
+    .infokort h3 { margin: 6px 0 8px; font-size: 20px; color: var(--oransje); }
+    .infokort p { margin: 0; color: #ddd; font-size: 16px; }
+    .infokort .meir { display: inline-block; margin-top: 12px; font-weight: bold; color: #fff; font-size: 15px; }
     @media (max-width: 760px) {
-      .front .tekst { padding: 18px 16px 26px; }
-      .front h1 img { height: 44px; }
-      .front p { font-size: 17px; }
+      .front { padding: 34px 16px 40px; }
+      .front h1 img { height: 46px; }
+      .front .under { font-size: 17px; margin-bottom: 24px; }
+      .infokort { grid-template-columns: 1fr; gap: 12px; }
     }
 
     .knapp {
@@ -154,15 +172,29 @@
     </div>
   </header>
 
-  <div class="front">
-    <img class="bilete" src="gruppebilete.jpg" alt="Medlemmene i Vikenes MC framfor klubblogoen på veggen i lokalet">
-    <div class="tekst">
-      <h1><img src="vikenes-tekst.png" alt="Vikenes MC"></h1>
-      <p>Motorsykkelklubb i Volda – sidan 2011</p>
-      <div class="knappar">
-        <a class="knapp" href="#quiz">MC Quiz</a>
-        <a class="knapp sekundar" href="#om">Om klubben</a>
-      </div>
+  <div class="front" role="img" aria-label="Medlemmene i Vikenes MC framfor klubblogoen i lokalet">
+    <h1><img src="vikenes-tekst.png" alt="Vikenes MC"></h1>
+    <p class="under">Motorsykkelklubb i Volda – sidan 2011</p>
+    <div class="infokort">
+      <a class="kortlenkje" href="#kontakt">
+        <div class="ikon">☕</div>
+        <h3>Torsdagskafé</h3>
+        <p>Torsdagar frå kl. 18:00 er de velkomne til kaffi og ein prat med gutta i klubben.
+          Vi sel is, brus og potetgull.</p>
+        <span class="meir">Finn oss →</span>
+      </a>
+      <a class="kortlenkje" href="#quiz">
+        <div class="ikon">🏍️</div>
+        <h3>MC Quiz</h3>
+        <p>Sosialt quizløp på motorsykkel i grupper. Neste løp blir sommaren 2027.</p>
+        <span class="meir">Les meir →</span>
+      </a>
+      <a class="kortlenkje" href="#om">
+        <div class="ikon">🔧</div>
+        <h3>Om klubben</h3>
+        <p>12 personar med felles interesse, og flotte lokale på Vikeneset i Volda.</p>
+        <span class="meir">Les meir →</span>
+      </a>
     </div>
   </div>
   <div class="stripe"></div>
@@ -209,13 +241,12 @@
     <div class="inn om">
       <div>
         <h2>Om klubben</h2>
-        <p class="ingress">Vikenes MC er ein motorsykkelklubb i Volda. Klubben starta som Afterbike
-          og fekk namnet Vikenes MC i 2011.</p>
-        <p>Vi har eige klubblokale på Vikenes, der vi samlast for kaffi, prat og planlegging av turar
-          – og der det skjer det meste som har med klubben å gjere.</p>
+        <p class="ingress">Vikenes MC starta i 2011. Klubben er 12 personar med felles interesse.</p>
+        <p>Vi har flotte lokale på Vikeneset i Volda, med opphaldsrom, verkstad og lager.</p>
         <div class="torsdag">
-          <b>☕ Kaffi med gutta</b>
-          Torsdagar er du velkomen innom lokalet på ein kopp kaffi.
+          <b>☕ Torsdagskafé</b>
+          Torsdagar frå kl. 18:00 er de velkomne til kaffi og ein prat med gutta i klubben.
+          Vi sel is, brus og potetgull.
         </div>
       </div>
       <img src="logo.png" alt="Klubblogoen til Vikenes MC">
