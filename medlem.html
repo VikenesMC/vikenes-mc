@@ -328,7 +328,7 @@
           <button data-fane="kalender" onclick="visFane('kalender')">Kalender</button>
           <button data-fane="arkiv" onclick="visFane('arkiv')">Arkiv</button>
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
-          ${meg.regnskap ? `<button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>` : ""}
+          <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
                                <button data-fane="gjestebok" onclick="visFane('gjestebok')">Gjestebok<span id="g-tal"></span></button>` : ""}
@@ -1223,15 +1223,15 @@
             <select style="width:auto; margin:0" onchange="regnAr = +this.value; regnRediger = null; visRegnskap()">
               ${r.years.map(y => `<option ${y === r.year ? "selected" : ""}>${y}</option>`).join("")}
             </select>
-            <div class="rad">
+            ${r.full ? `<div class="rad">
               <button class="sekundar liten" onclick="lastNedRegnskap()">📥 Excel (CSV)</button>
               <button class="sekundar liten" onclick="skrivUtRegnskap()">🖨️ Skriv ut</button>
-            </div>
+            </div>` : ""}
           </div>
           <div style="margin-top:12px">${saldo("bank")}</div>
         </div>
 
-        <div class="kort" id="regnskjema">
+        ${r.full ? `<div class="kort" id="regnskjema">
           <h2 style="margin-top:0">${p ? "Endre post" : "Ny post"}</h2>
           <div class="innut">
             <label><input type="radio" name="r-type" value="inn" ${p && p.belop > 0 ? "checked" : ""}><span>➕ Inn</span></label>
@@ -1266,7 +1266,7 @@
                 <button class="fare liten" onclick="slettPost(${x.id})">Slett</button>
               </div>
             </div>`).join("") || '<p class="dempa" style="margin:0">Ingen postar i år enno.</p>'}
-        </div>`;
+        </div>` : ""}`;
     }
 
     function redigerPost(id) {
