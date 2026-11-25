@@ -732,7 +732,8 @@
     let regnAr = new Date().getFullYear();
     let regnData = null;
     let regnRediger = null;   // posten som blir endra, eller null
-    const KONTO = { bank: "Bank", kontant: "Kontant" };
+    // Klubben har berre éin bankkonto (ingen kontantar lenger)
+    const KONTO = { bank: "Bank" };
 
     function kr(n) {
       return Number(n).toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
@@ -763,7 +764,7 @@
               <button class="sekundar liten" onclick="skrivUtRegnskap()">🖨️ Skriv ut</button>
             </div>
           </div>
-          <div class="saldoar" style="margin-top:12px">${saldo("bank")}${saldo("kontant")}</div>
+          <div style="margin-top:12px">${saldo("bank")}</div>
         </div>
 
         <div class="kort" id="regnskjema">
@@ -776,17 +777,8 @@
           <input id="r-belop" inputmode="decimal" placeholder="t.d. 249,90" value="${p ? String(Math.abs(p.belop)).replace(".", ",") : ""}">
           <label for="r-tekst">Kva gjeld det?</label>
           <input id="r-tekst" maxlength="200" placeholder="t.d. Kaffi og vaflar, Rema 1000" value="${esc(p ? p.tekst : "")}">
-          <div class="rad" style="align-items:flex-start">
-            <div style="flex:1; min-width:140px">
-              <label for="r-dato">Dato</label>
-              <input id="r-dato" type="date" value="${p ? p.dato : idag()}">
-            </div>
-            <div style="flex:1; min-width:140px">
-              <label for="r-konto">Konto</label>
-              <select id="r-konto">${Object.entries(KONTO).map(([k, n]) =>
-                `<option value="${k}" ${(p ? p.konto : "bank") === k ? "selected" : ""}>${n}</option>`).join("")}</select>
-            </div>
-          </div>
+          <label for="r-dato">Dato</label>
+          <input id="r-dato" type="date" value="${p ? p.dato : idag()}">
           <label for="r-kvittering">Kvittering (bilete eller PDF)${p && p.kvittering_path ? " – har alt ei, vel ny for å byte" : ""}</label>
           <input id="r-kvittering" type="file" accept="image/*,application/pdf" style="background:#222; color:#fff">
           <div class="rad" style="margin-top:12px">
@@ -802,7 +794,7 @@
             <div class="post">
               <div class="tekst">${esc(x.tekst)}</div>
               <div class="belop ${x.belop > 0 ? "inn" : "ut"}">${x.belop > 0 ? "+" : "−"} ${kr(Math.abs(x.belop))}</div>
-              <div class="meta">${datoKort(x.dato)} · ${KONTO[x.konto]}${x.created_name ? " · " + esc(x.created_name) : ""}</div>
+              <div class="meta">${datoKort(x.dato)}${x.created_name ? " · " + esc(x.created_name) : ""}</div>
               <div class="meta" style="text-align:right">${x.kvittering_path ? "📎 kvittering" : "⚠️ manglar kvittering"}</div>
               <div class="rad" style="grid-column: 1 / -1">
                 ${x.kvittering_path ? `<button class="liten" onclick="opneDok('${esc(x.kvittering_path)}')">Sjå kvittering</button>` : ""}
@@ -838,7 +830,7 @@
       const belop = parseFloat(document.getElementById("r-belop").value.replace(/\s/g, "").replace(",", "."));
       const tekst = document.getElementById("r-tekst").value.trim();
       const dato = document.getElementById("r-dato").value;
-      const konto = document.getElementById("r-konto").value;
+      const konto = "bank";
       let fil = document.getElementById("r-kvittering").files[0];
       if (!type) return feil("Vel Inn eller Ut.");
       if (!(belop > 0)) return feil("Skriv eit beløp større enn 0.");
@@ -882,13 +874,13 @@
       const r = regnData;
       const csvFelt = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
       const tal = n => Number(n).toFixed(2).replace(".", ",");
-      const linjer = [["Dato", "Konto", "Tekst", "Inn", "Ut", "Kvittering", "Ført av"].map(csvFelt).join(";")];
+      const linjer = [["Dato", "Tekst", "Inn", "Ut", "Kvittering", "Ført av"].map(csvFelt).join(";")];
       for (const x of [...r.postar].reverse()) {
-        linjer.push([datoKort(x.dato), KONTO[x.konto], x.tekst, x.belop > 0 ? tal(x.belop) : "", x.belop < 0 ? tal(-x.belop) : "",
+        linjer.push([datoKort(x.dato), x.tekst, x.belop > 0 ? tal(x.belop) : "", x.belop < 0 ? tal(-x.belop) : "",
                      x.kvittering_namn || (x.kvittering_path ? "ja" : "MANGLAR"), x.created_name || ""].map(csvFelt).join(";"));
       }
       linjer.push("");
-      for (const k of ["bank", "kontant"]) {
+      for (const k of ["bank"]) {
         const s = r.kontoar[k];
         linjer.push([`${KONTO[k]}: inngåande ${tal(s.inn_saldo)}`, `inn ${tal(s.inn)}`, `ut ${tal(-s.ut)}`, `saldo 31.12. ${tal(s.ut_saldo)}`].map(csvFelt).join(";"));
       }
@@ -900,10 +892,10 @@
 
     function skrivUtRegnskap() {
       const r = regnData;
-      const rader = [...r.postar].reverse().map(x => `<tr><td>${datoKort(x.dato)}</td><td>${KONTO[x.konto]}</td><td>${esc(x.tekst)}</td>
+      const rader = [...r.postar].reverse().map(x => `<tr><td>${datoKort(x.dato)}</td><td>${esc(x.tekst)}</td>
         <td class="t">${x.belop > 0 ? kr(x.belop) : ""}</td><td class="t">${x.belop < 0 ? kr(-x.belop) : ""}</td>
         <td>${x.kvittering_path ? "✔" : "MANGLAR"}</td></tr>`).join("");
-      const saldo = ["bank", "kontant"].map(k => { const s = r.kontoar[k];
+      const saldo = ["bank"].map(k => { const s = r.kontoar[k];
         return `<tr><td>${KONTO[k]}</td><td class="t">${kr(s.inn_saldo)}</td><td class="t">${kr(s.inn)}</td><td class="t">${kr(-s.ut)}</td><td class="t"><b>${kr(s.ut_saldo)}</b></td></tr>`; }).join("");
       const w = window.open("", "_blank");
       if (!w) return alert("Nettlesaren stoppa utskriftsvindauget. Tillat sprettoppvindauge og prøv igjen.");
@@ -912,7 +904,7 @@
         th,td{border:1px solid #999;padding:5px 7px;text-align:left} th{background:#eee} .t{text-align:right;white-space:nowrap}</style></head><body>
         <h1>Regnskap – Vikenes MC</h1><div>År ${r.year} · utskrive ${datoKort(idag())}</div>
         <h2>Saldo</h2><table><tr><th>Konto</th><th>Inngåande 1.1.</th><th>Inn</th><th>Ut</th><th>Saldo 31.12.</th></tr>${saldo}</table>
-        <h2>Postar</h2><table><tr><th>Dato</th><th>Konto</th><th>Tekst</th><th>Inn</th><th>Ut</th><th>Kvittering</th></tr>${rader}</table>
+        <h2>Postar</h2><table><tr><th>Dato</th><th>Tekst</th><th>Inn</th><th>Ut</th><th>Kvittering</th></tr>${rader}</table>
         <script>window.onload=()=>window.print()<\/script></body></html>`);
       w.document.close();
     }
