@@ -204,8 +204,8 @@
         <a href="#quiz">MC Quiz</a>
         <a href="#om">Om klubben</a>
         <a href="#torsdag">Torsdagskafé</a>
-        <a href="#vener">Klubbar</a>
         <a href="#gjestebok">Gjestebok</a>
+        <a href="#vener">Klubbar</a>
         <a href="#kontakt">Kontakt</a>
         <a class="logginn" href="medlem.html">Medlem? Logg inn</a>
       </nav>
@@ -311,6 +311,32 @@
     </div>
   </section>
 
+  <section id="gjestebok">
+    <div class="inn">
+      <h2>Gjestebok</h2>
+      <p class="ingress">På besøk hos oss? Sjekk inn for klubben din, og legg gjerne igjen ei helsing!
+        Klubbar som har vore innom, får ein 🏆 med tal under «Klubbar i nærområdet».
+        Helsingane blir viste her når styret har godkjent dei.</p>
+      <div class="gjestebok">
+        <form class="skriv" onsubmit="sendHelsing(event)">
+          <label for="g-namn">Namnet ditt</label>
+          <input id="g-namn" maxlength="60" autocomplete="name" required>
+          <label for="g-klubb">Klubben din <span style="font-weight:normal; color:var(--dempa)">(vel frå lista eller skriv namnet)</span></label>
+          <input id="g-klubb" list="klubbliste" maxlength="80" autocomplete="off" placeholder="Skriv eller vel klubb …">
+          <datalist id="klubbliste"></datalist>
+          <label class="kryss"><input type="checkbox" id="g-sjekkinn"> 🏆 Sjekk inn – vi er på besøk hos Vikenes MC</label>
+          <label for="g-tekst">Helsing <span style="font-weight:normal; color:var(--dempa)">(valfritt om du sjekkar inn)</span></label>
+          <textarea id="g-tekst" rows="4" maxlength="1000"></textarea>
+          <!-- Felle for robotar: usynleg for folk -->
+          <input id="g-felle" class="felle" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <button class="knapp" type="submit">Send</button>
+          <p id="g-svar" class="svar"></p>
+        </form>
+        <div id="helsingar" class="helsingar"><p class="tom">Lastar helsingar …</p></div>
+      </div>
+    </div>
+  </section>
+
   <section id="vener">
     <div class="inn">
       <h2>Klubbar i nærområdet</h2>
@@ -340,32 +366,6 @@
         <div class="ven"><img src="vener/stallar-mc.jpg" alt="Logoen til Stallar MC"><h3>Stallar MC</h3><p>Søre-Sunnmøre</p></div>
         <div class="ven"><img src="vener/thorsmen-mc.jpg" alt="Logoen til Thorsmen MC"><h3>Thorsmen MC</h3><p>Kristiansund</p></div>
         <div class="ven"><img src="vener/twin-riders-mc.jpg" alt="Logoen til Twin Riders MC"><h3>Twin Riders MC</h3><p>Sykkylven</p></div>
-      </div>
-    </div>
-  </section>
-
-  <section id="gjestebok">
-    <div class="inn">
-      <h2>Gjestebok</h2>
-      <p class="ingress">På besøk hos oss? Sjekk inn for klubben din, og legg gjerne igjen ei helsing!
-        Klubbar som har vore innom, får ein 🏆 med tal under «Klubbar i nærområdet».
-        Helsingane blir viste her når styret har godkjent dei.</p>
-      <div class="gjestebok">
-        <form class="skriv" onsubmit="sendHelsing(event)">
-          <label for="g-namn">Namnet ditt</label>
-          <input id="g-namn" maxlength="60" autocomplete="name" required>
-          <label for="g-klubb">Klubben din <span style="font-weight:normal; color:var(--dempa)">(vel frå lista eller skriv namnet)</span></label>
-          <input id="g-klubb" list="klubbliste" maxlength="80" autocomplete="off" placeholder="Skriv eller vel klubb …">
-          <datalist id="klubbliste"></datalist>
-          <label class="kryss"><input type="checkbox" id="g-sjekkinn"> 🏆 Sjekk inn – vi er på besøk hos Vikenes MC</label>
-          <label for="g-tekst">Helsing <span style="font-weight:normal; color:var(--dempa)">(valfritt om du sjekkar inn)</span></label>
-          <textarea id="g-tekst" rows="4" maxlength="1000"></textarea>
-          <!-- Felle for robotar: usynleg for folk -->
-          <input id="g-felle" class="felle" tabindex="-1" autocomplete="off" aria-hidden="true">
-          <button class="knapp" type="submit">Send</button>
-          <p id="g-svar" class="svar"></p>
-        </form>
-        <div id="helsingar" class="helsingar"><p class="tom">Lastar helsingar …</p></div>
       </div>
     </div>
   </section>
