@@ -868,7 +868,7 @@
           <label for="t-tittel">Kva er det?</label>
           <input id="t-tittel" maxlength="120" placeholder="t.d. Sommartreff hos Eid MC" value="${esc(e.title || "")}">
           <div class="rad" style="align-items:flex-start">
-            <div style="flex:1; min-width:140px"><label for="t-dato">Dato</label><input id="t-dato" type="date" value="${e.dato || kalValt}"></div>
+            <div style="flex:1; min-width:140px"><label for="t-dato">Dato</label>${datoFelt("t-dato", e.dato || kalValt)}</div>
             <div style="flex:1; min-width:150px"><label for="t-time">Klokka (valfritt)</label>
               <div class="rad" style="flex-wrap:nowrap; gap:4px">
                 <select id="t-time" style="margin-top:6px">${tidVal(24, 1, e.tid ? e.tid.slice(0, 2) : "")}</select>
@@ -877,7 +877,7 @@
               </div></div>
           </div>
           <label for="t-til">Siste dag (om det varer fleire dagar)</label>
-          <input id="t-til" type="date" value="${e.til_dato || ""}">
+          ${datoFelt("t-til", e.til_dato || "")}
           <label for="t-arr">Kven arrangerer?</label>
           <input id="t-arr" maxlength="80" placeholder="t.d. Vikenes MC eller Eid MC" value="${esc(e.arranger || "")}">
           <label for="t-stad">Stad (valfritt)</label>
@@ -901,8 +901,8 @@
             <input type="radio" name="f-type" value="${k}" ${(a.type || "jobb") === k ? "checked" : ""}> ${n}</label>`).join("")}
         </div>
         <div class="rad" style="align-items:flex-start">
-          <div style="flex:1; min-width:140px"><label for="f-fra">Frå</label><input id="f-fra" type="date" value="${a.fra || kalValt}"></div>
-          <div style="flex:1; min-width:140px"><label for="f-til">Til og med</label><input id="f-til" type="date" value="${a.til || kalValt}"></div>
+          <div style="flex:1; min-width:140px"><label for="f-fra">Frå</label>${datoFelt("f-fra", a.fra || kalValt)}</div>
+          <div style="flex:1; min-width:140px"><label for="f-til">Til og med</label>${datoFelt("f-til", a.til || kalValt)}</div>
         </div>
         <label for="f-note">Merknad (valfritt)</label>
         <input id="f-note" maxlength="200" placeholder="t.d. nattskift" value="${esc(a.note || "")}">
@@ -931,17 +931,23 @@
       const v = k => document.getElementById(k).value;
       try {
         const tid = v("t-time") ? `${v("t-time")}:${v("t-min")}` : null;
-        await rpc("event_save", { p_id: id, p_title: v("t-tittel"), p_dato: v("t-dato"), p_tid: tid,
-          p_til_dato: v("t-til") || null, p_place: v("t-stad"), p_link: v("t-lenkje"), p_info: v("t-info"), p_arranger: v("t-arr") });
+        const dato = lesDato("t-dato"), til = lesDato("t-til");
+        if (!dato || til === null) throw new Error("bad_dates");
+        await rpc("event_save", { p_id: id, p_title: v("t-tittel"), p_dato: dato, p_tid: tid,
+          p_til_dato: til || null, p_place: v("t-stad"), p_link: v("t-lenkje"), p_info: v("t-info"), p_arranger: v("t-arr") });
       } catch (e) { document.getElementById("k-melding").textContent = kalFeil[e.message] || e.message; return; }
-      kalValt = v("t-dato"); const d = new Date(kalValt + "T12:00:00"); kalMnd = new Date(d.getFullYear(), d.getMonth(), 1);
+      kalValt = lesDato("t-dato"); const d = new Date(kalValt + "T12:00:00"); kalMnd = new Date(d.getFullYear(), d.getMonth(), 1);
       kalSkjema = null; visKalender();
     }
 
     async function lagreFravaer(id) {
       const v = k => document.getElementById(k).value;
       const type = document.querySelector('input[name="f-type"]:checked')?.value;
-      try { await rpc("absence_save", { p_id: id, p_fra: v("f-fra"), p_til: v("f-til"), p_type: type, p_note: v("f-note") }); }
+      try {
+        const fra = lesDato("f-fra"), til = lesDato("f-til");
+        if (!fra || !til) throw new Error("bad_dates");
+        await rpc("absence_save", { p_id: id, p_fra: fra, p_til: til, p_type: type, p_note: v("f-note") });
+      }
       catch (e) { document.getElementById("k-melding").textContent = kalFeil[e.message] || e.message; return; }
       kalSkjema = null; visKalender();
     }
@@ -995,7 +1001,28 @@
       return Number(n).toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
     }
     function idag() { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
-    function datoKort(iso) { const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; }
+    // Norsk datoformat: DD/MM-ÅÅÅÅ
+    function datoKort(iso) { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-"); return `${d}/${m}-${y}`; }
+
+    // Datofelt som alltid viser DD/MM-ÅÅÅÅ (nettlesaren sitt eige datofelt følgjer språket på mobilen)
+    function datoFelt(id, iso) {
+      return `<input id="${id}" class="datofelt" inputmode="numeric" maxlength="10" placeholder="DD/MM-ÅÅÅÅ"
+        value="${iso ? datoKort(iso) : ""}" oninput="formaterDato(this)">`;
+    }
+    function formaterDato(el) {
+      const s = el.value.replace(/\D/g, "").slice(0, 8);
+      el.value = s.length > 4 ? `${s.slice(0, 2)}/${s.slice(2, 4)}-${s.slice(4)}` : s.length > 2 ? `${s.slice(0, 2)}/${s.slice(2)}` : s;
+    }
+    // Les datofeltet → ÅÅÅÅ-MM-DD, "" om tomt, null om ugyldig
+    function lesDato(id) {
+      const v = document.getElementById(id).value.trim();
+      if (!v) return "";
+      const m = v.match(/^(\d{1,2})\D(\d{1,2})\D(\d{4})$/);
+      if (!m) return null;
+      const d = new Date(+m[3], +m[2] - 1, +m[1]);
+      if (d.getFullYear() !== +m[3] || d.getMonth() !== +m[2] - 1 || d.getDate() !== +m[1]) return null;
+      return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    }
 
     async function visRegnskap() {
       try { regnData = await rpc("ledger_year", { p_year: regnAr }); }
@@ -1034,7 +1061,7 @@
           <label for="r-tekst">Kva gjeld det?</label>
           <input id="r-tekst" maxlength="200" placeholder="t.d. Kaffi og vaflar, Rema 1000" value="${esc(p ? p.tekst : "")}">
           <label for="r-dato">Dato</label>
-          <input id="r-dato" type="date" value="${p ? p.dato : idag()}">
+          ${datoFelt("r-dato", p ? p.dato : idag())}
           <label for="r-kvittering">Kvittering (bilete eller PDF)${p && p.kvittering_path ? " – har alt ei, vel ny for å byte" : ""}</label>
           <input id="r-kvittering" type="file" accept="image/*,application/pdf" style="background:#222; color:#fff">
           <div class="rad" style="margin-top:12px">
@@ -1085,7 +1112,7 @@
       const type = document.querySelector('input[name="r-type"]:checked')?.value;
       const belop = parseFloat(document.getElementById("r-belop").value.replace(/\s/g, "").replace(",", "."));
       const tekst = document.getElementById("r-tekst").value.trim();
-      const dato = document.getElementById("r-dato").value;
+      const dato = lesDato("r-dato");
       const konto = "bank";
       let fil = document.getElementById("r-kvittering").files[0];
       if (!type) return feil("Vel Inn eller Ut.");
