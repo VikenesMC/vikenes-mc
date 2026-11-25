@@ -45,6 +45,19 @@ begin
   end if;
 end $$;
 
+-- Nye godkjende medlemmer får quiz_admin med det same (President kan ta det vekk)
+create or replace function public._access_ved_godkjenning()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status = 'approved' and (tg_op = 'INSERT' or old.status is distinct from 'approved') then
+    insert into public.member_access (member_id, area) values (new.id, 'quiz_admin') on conflict do nothing;
+  end if;
+  return new;
+end $$;
+drop trigger if exists members_access_godkjent on public.members;
+create trigger members_access_godkjent after insert or update of status on public.members
+  for each row execute function public._access_ved_godkjenning();
+
 -- Har den innlogga tilgang til eit område?
 create or replace function public.has_access(p_area text)
 returns boolean language sql stable security definer set search_path = public as $$
