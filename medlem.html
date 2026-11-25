@@ -109,6 +109,11 @@
     .skrivfelt { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
     .skrivfelt textarea { flex: 1; margin: 0; resize: none; min-height: 48px; max-height: 140px; }
     .skrivfelt button { margin: 0; height: 48px; }
+    table.tilgang { border-collapse: collapse; width: 100%; font-size: 14px; }
+    table.tilgang th { font-size: 12px; font-weight: normal; color: var(--dempa); padding: 4px; vertical-align: bottom; }
+    table.tilgang td { padding: 8px 4px; border-top: 1px solid #333; text-align: center; }
+    table.tilgang td:first-child { text-align: left; min-width: 110px; }
+    table.tilgang input[type=checkbox] { width: 22px; height: 22px; margin: 0; accent-color: var(--oransje); }
   </style>
 </head>
 <body>
@@ -673,11 +678,48 @@
         <div class="kort">
           <h2 style="margin-top:0">Medlemmer (${godkjende.length})</h2>
           ${godkjende.map(medlemRad).join("") || '<p class="dempa">Ingen enno.</p>'}
-          ${meg.leader ? '<p class="dempa" style="font-size:14px">Berre President og Vice President kan endre roller. Du kan ikkje endre deg sjølv.</p>' : ""}
+          ${meg.leader ? '<p class="dempa" style="font-size:14px">Du kan ikkje endre deg sjølv.</p>' : ""}
         </div>
+        ${meg.role === "President" ? `<div class="kort" id="tilgang-kort">
+          <h2 style="margin-top:0">Tilgang</h2>
+          <p class="dempa" style="margin-top:0">Huk av kven som slepp inn kvar. Endringa gjeld med ein gong.</p>
+          <div id="tilgang-liste" class="dempa">Lastar …</div>
+        </div>` : ""}
         ${fjerna.length ? `<div class="kort" style="border-top-color:#555">
           <h2 style="margin-top:0">Utan tilgang</h2>
           ${fjerna.map(medlemRad).join("")}</div>` : ""}`;
+      if (meg.role === "President") lastTilgang();
+    }
+
+    // President: tilgangsregister – kven slepp inn kvar
+    const OMRADE = [
+      ["quiz_admin", "Quiz-admin"],
+      ["medlemsregister", "Medlemsregister"],
+      ["nyheiter", "Nyheiter og gjestebok"],
+      ["arkiv", "Arkiv (laste opp)"],
+      ["regnskap", "Regnskap"],
+    ];
+    async function lastTilgang() {
+      const boks = document.getElementById("tilgang-liste");
+      if (!boks) return;
+      let rader;
+      try { rader = await rpc("access_list"); }
+      catch (e) { boks.textContent = "Feil: " + e.message; return; }
+      boks.className = "";
+      boks.innerHTML = `<div style="overflow-x:auto"><table class="tilgang">
+        <tr><th></th>${OMRADE.map(([, n]) => `<th>${esc(n)}</th>`).join("")}</tr>
+        ${rader.map(r => `<tr><td><b>${esc(r.name)}</b><br><span class="dempa" style="font-size:13px">${esc(r.role)}</span></td>
+          ${r.role === "President"
+            ? `<td colspan="${OMRADE.length}" class="dempa">Alt (President)</td>`
+            : OMRADE.map(([k]) => `<td><input type="checkbox" ${r.areas.includes(k) ? "checked" : ""}
+                onchange="settTilgang('${r.id}','${k}',this)"></td>`).join("")}</tr>`).join("")}
+      </table></div>`;
+    }
+    async function settTilgang(id, omrade, boks) {
+      boks.disabled = true;
+      try { await rpc("access_set", { p_member: id, p_area: omrade, p_allowed: boks.checked }); }
+      catch (e) { boks.checked = !boks.checked; alert(e.message); }
+      boks.disabled = false;
     }
 
     // President: vis QR-kode som nye medlemmer skannar for å lage konto
@@ -799,7 +841,7 @@
     let aktivMappe = "reglar";
 
     function kanSkrive(mappe) {
-      return mappe === "regnskap" ? !!meg.regnskap : !!meg.leader;
+      return mappe === "regnskap" ? !!meg.regnskap : !!meg.arkiv;
     }
     function storleik(b) {
       if (!b && b !== 0) return "";
