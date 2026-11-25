@@ -5,14 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vikenes MC – Medlem</title>
   <meta name="robots" content="noindex">
+  <!-- App på heimeskjermen (krevst for varsel på iPhone) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
+  <link rel="apple-touch-icon" href="app-ikon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Vikenes MC">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap">
   <link rel="stylesheet" href="stil.css">
   <style>
     .topp h1 { font-size: 30px; }
     img.oe { height: .9em; width: auto; max-width: 100%; vertical-align: middle; display: block; }
     .meg { font-size: 15px; }
-    .faner2 { display: flex; gap: 6px; margin-bottom: 16px; }
-    .faner2 button { flex: 1; margin-top: 0; background: #333; color: #fff; }
+    .faner2 { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+    .faner2 button { flex: 1 1 auto; margin-top: 0; background: #333; color: #fff; padding: 10px 12px; font-size: 15px; }
+    textarea { font-family: inherit; }
     .faner2 button.aktiv { background: var(--oransje); color: #000; }
     .medlem { padding: 12px 0; border-bottom: 1px solid var(--linje); }
     .medlem:last-child { border-bottom: 0; }
@@ -22,6 +30,23 @@
     .medlem select { width: auto; padding: 8px; margin-top: 8px; font-size: 15px; }
     .medlem .rad button { margin-top: 8px; }
     .kjem { color: var(--dempa); font-size: 16px; }
+
+    /* ---------- Chat ---------- */
+    .varselboks { background: var(--kort); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; font-size: 15px; }
+    .varselboks button { margin-top: 8px; }
+    .chatlogg { background: var(--kort); border-radius: 10px; padding: 12px; height: 58vh; min-height: 300px; overflow-y: auto; }
+    .dag { text-align: center; color: var(--dempa); font-size: 13px; margin: 10px 0 6px; }
+    .mld { max-width: 85%; margin: 6px 0; }
+    .mld .boble { background: #2b2b2b; border-radius: 14px 14px 14px 4px; padding: 8px 12px; white-space: pre-wrap; word-wrap: break-word; }
+    .mld .kven { font-size: 13px; color: var(--oransje); font-weight: bold; margin: 0 0 2px 4px; }
+    .mld .meta { font-size: 12px; color: var(--dempa); margin: 2px 4px 0; }
+    .mld .meta button { background: none; color: var(--dempa); padding: 0; margin: 0; font-size: 12px; font-weight: normal; text-decoration: underline; }
+    .mld.min { margin-left: auto; }
+    .mld.min .boble { background: var(--oransje); color: #000; border-radius: 14px 14px 4px 14px; }
+    .mld.min .meta { text-align: right; }
+    .skrivfelt { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
+    .skrivfelt textarea { flex: 1; margin: 0; resize: none; min-height: 48px; max-height: 140px; }
+    .skrivfelt button { margin: 0; height: 48px; }
   </style>
 </head>
 <body>
@@ -42,7 +67,7 @@
     let meg = null;          // medlem_me()
     let liste = [];          // member_list()
     let roller = [];
-    let aktivFane = "heim";
+    let aktivFane = "chat";
     let innloggingsFane = "inn";
 
     const vis = html => document.getElementById("innhald").innerHTML = html;
@@ -193,6 +218,7 @@
     }
 
     async function loggUt() {
+      stoppChat();
       await db.auth.signOut();
       meg = null;
       innloggingsFane = "inn";
@@ -207,7 +233,7 @@
           <button class="sekundar liten" onclick="loggUt()">Logg ut</button>
         </div>
         <div class="faner2">
-          <button data-fane="heim" onclick="visFane('heim')">Heim</button>
+          <button data-fane="chat" onclick="visFane('chat')">Chat</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
                                <button data-fane="gjestebok" onclick="visFane('gjestebok')">Gjestebok<span id="g-tal"></span></button>` : ""}
@@ -215,13 +241,15 @@
         <div id="fane"></div>`);
       visFane(aktivFane);
       if (meg.news_writer) oppdaterGjestetal();
+      fornyAbonnement();
     }
 
     async function visFane(f) {
       aktivFane = f;
       document.querySelectorAll(".faner2 button").forEach(b =>
         b.classList.toggle("aktiv", b.dataset.fane === f));
-      if (f === "heim") return visHeim();
+      if (f !== "chat") stoppChat();
+      if (f === "chat") return visChat();
       if (f === "nyheiter") return visNyheiter();
       if (f === "gjestebok") return visGjestebok();
       try { liste = await rpc("member_list"); }
@@ -229,23 +257,207 @@
       visMedlemmer();
     }
 
-    function visHeim() {
-      const ventande = liste.filter(m => m.status === "pending").length;
+    // ---------------- Chat ----------------
+    let chat = { siste: 0, forste: 0, total: 0, timer: null, mine: new Set(), dagar: new Set() };
+
+    function stoppChat() { if (chat.timer) { clearInterval(chat.timer); chat.timer = null; } }
+
+    async function visChat() {
+      stoppChat();
+      chat = { siste: 0, forste: 0, total: 0, timer: null, dagar: new Set() };
       document.getElementById("fane").innerHTML = `
-        ${meg.leader && ventande ? `
-          <div class="kort" style="border-top-color:var(--gul)">
-            <p class="vars" style="margin:0">${ventande} ventar på godkjenning</p>
-            <button onclick="visFane('medlemmer')">Sjå medlemmer</button>
-          </div>` : ""}
-        <div class="kort">
-          <h2 style="margin-top:0">Velkomen, ${esc(meg.name.split(" ")[0])}!</h2>
-          <p class="kjem">Her kjem etter kvart:</p>
-          <p class="kjem">💬 Chat med varsel<br>📅 Kalender<br>📄 Dokument</p>
+        <div id="leiarvarsel"></div>
+        <div class="varselboks" id="varselboks"></div>
+        <div class="chatlogg" id="chatlogg"><p class="dempa">Lastar chatten …</p></div>
+        <div class="skrivfelt">
+          <textarea id="chattekst" rows="1" maxlength="2000" placeholder="Skriv ei melding …"></textarea>
+          <button onclick="sendChat()">Send</button>
         </div>`;
-      // Hent lista i bakgrunnen så leiarane ser ventande på heimesida
-      if (meg.leader && !liste.length) {
-        rpc("member_list").then(l => { liste = l; if (aktivFane === "heim" && l.some(m => m.status === "pending")) visHeim(); }).catch(() => {});
+      const ta = document.getElementById("chattekst");
+      ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px"; });
+      ta.addEventListener("keydown", e => {
+        // Enter sender på PC; Shift+Enter gir ny linje. På mobil brukar ein Send-knappen.
+        if (e.key === "Enter" && !e.shiftKey && !/Mobi|Android|iPhone|iPad/.test(navigator.userAgent)) { e.preventDefault(); sendChat(); }
+      });
+      visVarselboks();
+      visLeiarvarsel();
+      document.getElementById("chatlogg").innerHTML = "";
+      await hentChat(true);
+      chat.timer = setInterval(() => { if (!document.hidden) hentChat(false); }, 4000);
+    }
+
+    async function visLeiarvarsel() {
+      if (!meg.leader) return;
+      try {
+        const l = await rpc("member_list");
+        const n = l.filter(m => m.status === "pending").length;
+        const el = document.getElementById("leiarvarsel");
+        if (el && n) el.innerHTML = `<div class="kort" style="border-top-color:var(--gul); padding:12px 16px">
+          <span class="vars">${n} ventar på godkjenning</span>
+          <button class="liten" style="margin-left:10px" onclick="visFane('medlemmer')">Sjå medlemmer</button></div>`;
+      } catch (e) { /* ikkje kritisk */ }
+    }
+
+    function klokke(iso) { return new Date(iso).toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" }); }
+    function dagTekst(iso) {
+      const d = new Date(iso), i = new Date(); const ig = new Date(); ig.setDate(i.getDate() - 1);
+      if (d.toDateString() === i.toDateString()) return "I dag";
+      if (d.toDateString() === ig.toDateString()) return "I går";
+      return d.toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long" });
+    }
+
+    function meldingHtml(m) {
+      const min = m.author_id === meg.id;
+      const dag = new Date(m.created_at).toDateString();
+      let skil = "";
+      if (!chat.dagar.has(dag)) { chat.dagar.add(dag); skil = `<div class="dag">${esc(dagTekst(m.created_at))}</div>`; }
+      return `${skil}<div class="mld ${min ? "min" : ""}" data-id="${m.id}">
+          ${min ? "" : `<div class="kven">${esc(m.author)}</div>`}
+          <div class="boble">${esc(m.body)}</div>
+          <div class="meta">${esc(klokke(m.created_at))} ·
+            <button onclick="visSettAv(${m.id})">Sett av <span class="sett">${m.seen}</span> av ${chat.total}</button></div>
+        </div>`;
+    }
+
+    async function hentChat(forsteGong) {
+      let r;
+      try { r = await rpc("chat_list", { p_after: chat.siste }); }
+      catch (e) { if (forsteGong) document.getElementById("chatlogg").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const logg = document.getElementById("chatlogg");
+      if (!logg) return;
+      chat.total = r.total;
+      const nedst = logg.scrollHeight - logg.scrollTop - logg.clientHeight < 80;
+      if (forsteGong && !r.messages.length) logg.innerHTML = '<p class="dempa" id="tomchat">Ingen meldingar enno. Skriv den første!</p>';
+      if (r.messages.length) {
+        document.getElementById("tomchat")?.remove();
+        if (!chat.forste) chat.forste = r.messages[0].id;
+        logg.insertAdjacentHTML("beforeend", r.messages.map(meldingHtml).join(""));
+        chat.siste = r.messages[r.messages.length - 1].id;
+        if (forsteGong || nedst || r.messages.some(m => m.author_id === meg.id)) logg.scrollTop = logg.scrollHeight;
+      } else if (chat.forste) {
+        // Ingen nye meldingar – oppdater berre «Sett av»-tala
+        try {
+          const tal = await rpc("chat_seen_counts", { p_from: chat.forste });
+          for (const [id, n] of Object.entries(tal)) {
+            const s = logg.querySelector(`.mld[data-id="${id}"] .sett`);
+            if (s) s.textContent = n;
+          }
+        } catch (e) { /* prøver igjen neste runde */ }
       }
+      if (chat.siste && !document.hidden) rpc("chat_mark_read", { p_id: chat.siste }).catch(() => {});
+    }
+
+    async function sendChat() {
+      const ta = document.getElementById("chattekst");
+      const tekst = ta.value.trim();
+      if (!tekst) return;
+      ta.disabled = true;
+      try {
+        const id = await rpc("chat_send", { p_body: tekst });
+        ta.value = ""; ta.style.height = "auto";
+        // Send varsel til dei andre (treng ikkje vente på svaret)
+        db.functions.invoke("chat-push", { body: { action: "send", message_id: id } }).catch(() => {});
+        await hentChat(false);
+      } catch (e) {
+        alert("Klarte ikkje å sende: " + e.message);
+      }
+      ta.disabled = false; ta.focus();
+    }
+
+    async function visSettAv(id) {
+      let r;
+      try { r = await rpc("chat_seen_by", { p_id: id }); } catch (e) { return alert(e.message); }
+      alert(`Sett av (${r.seen.length}):\n${r.seen.join(", ") || "–"}\n\nIkkje sett enno (${r.not_seen.length}):\n${r.not_seen.join(", ") || "–"}`);
+    }
+
+    // Opna frå eit varsel medan sida alt er open → gå til chatten
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", e => { if (e.data === "opne-chat" && meg && meg.status === "approved") visFane("chat"); });
+    }
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && aktivFane === "chat" && chat.timer) hentChat(false); });
+
+    // ---------------- Varsel (push) ----------------
+    const erIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const erApp = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+    async function harAbonnement() {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+      const reg = await navigator.serviceWorker.getRegistration();
+      return !!(reg && await reg.pushManager.getSubscription());
+    }
+
+    async function visVarselboks() {
+      const boks = document.getElementById("varselboks");
+      if (!boks) return;
+      if (erIOS && !erApp) {
+        boks.innerHTML = `🔔 <b>Varsel på iPhone:</b> trykk på <b>Del</b>-knappen (firkanten med pil opp) nedst i Safari,
+          vel <b>«Legg til på Heim-skjerm»</b>, og opne Vikenes MC frå ikonet. Då kan du slå på varsel.`;
+        return;
+      }
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        boks.innerHTML = "Denne nettlesaren kan ikkje vise varsel. Prøv Chrome eller Safari.";
+        return;
+      }
+      if (Notification.permission === "denied") {
+        boks.innerHTML = "🔕 Varsel er blokkerte for denne sida. Slå dei på i innstillingane til nettlesaren.";
+        return;
+      }
+      if (Notification.permission === "granted" && await harAbonnement()) {
+        boks.innerHTML = `🔔 Varsel er på for denne eininga.
+          <button class="sekundar liten" style="margin-left:8px" onclick="testVarsel()">Send testvarsel</button>`;
+        return;
+      }
+      boks.innerHTML = `Få varsel på mobilen når nokon skriv i chatten.
+        <br><button onclick="slaaPaaVarsel()">🔔 Slå på varsel</button>`;
+    }
+
+    function b64tilBytes(b64) {
+      const pad = "=".repeat((4 - b64.length % 4) % 4);
+      const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
+
+    async function slaaPaaVarsel() {
+      const boks = document.getElementById("varselboks");
+      try {
+        const lov = await Notification.requestPermission();
+        if (lov !== "granted") return visVarselboks();
+        boks.innerHTML = "Slår på varsel …";
+        const reg = await navigator.serviceWorker.register("sw.js");
+        await navigator.serviceWorker.ready;
+        let nokkel = await rpc("push_public_key");
+        if (!nokkel) {
+          const { data, error } = await db.functions.invoke("chat-push", { body: { action: "key" } });
+          if (error) throw error;
+          nokkel = data.publicKey;
+        }
+        let ab = await reg.pushManager.getSubscription();
+        if (!ab) ab = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64tilBytes(nokkel) });
+        const j = ab.toJSON();
+        await rpc("push_subscribe", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent });
+      } catch (e) {
+        boks.innerHTML = `<span class="feil">Klarte ikkje å slå på varsel: ${esc(e.message || String(e))}</span>`;
+        return;
+      }
+      visVarselboks();
+    }
+
+    async function testVarsel() {
+      const { data, error } = await db.functions.invoke("chat-push", { body: { action: "test" } });
+      if (error) return alert("Feil: " + error.message);
+      alert(data.sendt ? "Testvarsel sendt – det skal kome om nokre sekund." : "Fann ingen eining å sende til. Prøv å slå på varsel på nytt.");
+    }
+
+    // Hald abonnementet oppdatert (t.d. etter at nettlesaren har fornya det)
+    async function fornyAbonnement() {
+      try {
+        if (Notification.permission !== "granted" || !("serviceWorker" in navigator)) return;
+        const reg = await navigator.serviceWorker.register("sw.js");
+        const ab = await reg.pushManager.getSubscription();
+        if (!ab) return;
+        const j = ab.toJSON();
+        await rpc("push_subscribe", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent });
+      } catch (e) { /* ikkje kritisk */ }
     }
 
     function rolleVal(id, valt) {
