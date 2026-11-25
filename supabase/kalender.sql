@@ -190,7 +190,7 @@ begin
   if not public.is_member() then raise exception 'not_member'; end if;
   select * into v_e from public.cal_events where id = p_id;
   if not found then raise exception 'not_found'; end if;
-  v_tekst := '📅 ' || v_e.title || ' – ' || to_char(v_e.dato, 'DD.MM.YYYY')
+  v_tekst := '📅 ' || v_e.title || ' – ' || to_char(v_e.dato, 'DD/MM-YYYY')
              || coalesce(' kl. ' || to_char(v_e.tid, 'HH24:MI'), '')
              || coalesce(' (' || v_e.arranger || ')', '') || E'\nKan du vere med?';
   insert into public.chat_messages (author_id, body, event_id) values (auth.uid(), v_tekst, p_id) returning id into v_id;
