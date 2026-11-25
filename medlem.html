@@ -21,6 +21,21 @@
     .faner2 { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
     .faner2 button { flex: 1 1 auto; margin-top: 0; background: #333; color: #fff; padding: 10px 12px; font-size: 15px; }
     textarea { font-family: inherit; }
+
+    /* Bakgrunn som i lokalet: svart med oransje stripe og vinge-logoen svakt bak */
+    body {
+      background:
+        linear-gradient(rgba(10,10,10,.90), rgba(10,10,10,.94)),
+        url("gruppebilete.jpg") center top / cover fixed no-repeat,
+        #0a0a0a;
+    }
+    .wrap { position: relative; }
+    .medlem-topp { text-align: center; margin: 0 0 18px; }
+    .medlem-topp .stripe { padding: 6px 0; }
+    .medlem-topp .stripe img { display: block; margin: 0 auto; width: 86%; max-width: 460px; height: auto; }
+    .medlem-topp img.oe { height: 44px; margin: 6px auto 0; display: block; }
+    .medlem-topp .under { color: var(--dempa); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
+    .kort, .chatlogg, .varselboks { background: rgba(26,26,26,.92); }
     .faner2 button.aktiv { background: var(--oransje); color: #000; }
     .medlem { padding: 12px 0; border-bottom: 1px solid var(--linje); }
     .medlem:last-child { border-bottom: 0; }
@@ -52,9 +67,10 @@
 <body>
   <div class="wrap">
     <p style="margin:0 0 6px"><a href="index.html" class="dempa" style="font-size:15px">← Til framsida</a></p>
-    <div class="topp">
-      <img class="logo" src="logo.png" alt="Vikenes MC">
-      <h1><img class="oe" src="vikenes-tekst.png" alt="Vikenes MC"></h1>
+    <div class="medlem-topp">
+      <div class="stripe"><img src="vinge-logo.png" alt=""></div>
+      <h1 style="margin:0"><img class="oe" src="vikenes-tekst.png" alt="Vikenes MC"></h1>
+      <div class="under">Medlemssida</div>
     </div>
 
     <div id="innhald"><p class="dempa">Lastar …</p></div>
