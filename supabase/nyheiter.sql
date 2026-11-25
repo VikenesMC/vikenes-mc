@@ -86,8 +86,9 @@ begin
   p_link_text := nullif(trim(coalesce(p_link_text, '')), '');
   if length(p_title) < 2 or length(p_title) > 120 then raise exception 'bad_title'; end if;
   if length(p_body) > 5000 then raise exception 'bad_body'; end if;
-  -- Lenkje: berre https://… eller ei side på vår eiga nettside (t.d. quiz.html)
-  if p_link_url is not null and p_link_url !~ '^(https://[^\s<>"]+|[a-z0-9_\-]+\.html(\?[^\s<>"]*)?)$' then
+  -- Lenkje: berre https://…, ei side på vår eiga nettside (t.d. quiz.html)
+  -- eller ein bolk på framsida (t.d. #quiz)
+  if p_link_url is not null and p_link_url !~ '^(https://[^\s<>"]+|([a-z0-9_\-]+\.html(\?[^\s<>"#]*)?)?(#[a-z0-9_\-]+)?)$' then
     raise exception 'bad_link';
   end if;
   select name into v_namn from public.members where id = auth.uid();
