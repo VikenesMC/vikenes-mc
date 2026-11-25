@@ -22,7 +22,7 @@ alter table public.absences drop constraint if exists absences_type_check;
 alter table public.absences add constraint absences_type_check check (type in ('jobb', 'ferie', 'vekk'));
 alter table public.absences enable row level security;
 
-create table if not exists public.events (
+create table if not exists public.cal_events (
   id            bigint generated always as identity primary key,
   title         text not null,
   dato          date not null,
@@ -36,10 +36,10 @@ create table if not exists public.events (
   created_name  text,
   created_at    timestamptz not null default now()
 );
-alter table public.events enable row level security;
+alter table public.cal_events enable row level security;
 
 create table if not exists public.event_rsvp (
-  event_id    bigint not null references public.events(id) on delete cascade,
+  event_id    bigint not null references public.cal_events(id) on delete cascade,
   member_id   uuid not null references public.members(id) on delete cascade,
   svar        boolean not null,
   updated_at  timestamptz not null default now(),
@@ -47,7 +47,7 @@ create table if not exists public.event_rsvp (
 );
 alter table public.event_rsvp enable row level security;
 
-alter table public.chat_messages add column if not exists event_id bigint references public.events(id) on delete set null;
+alter table public.chat_messages add column if not exists event_id bigint references public.cal_events(id) on delete set null;
 
 -- Treff som JSON (brukt både i kalenderen og i chatten)
 create or replace function public._event_json(p_id bigint)
@@ -67,7 +67,7 @@ returns json language sql stable security definer set search_path = public as $$
     'borte', coalesce((select json_agg(json_build_object('name', m.name, 'type', a.type) order by m.name)
                         from public.absences a join public.members m on m.id = a.member_id and m.status = 'approved'
                        where a.fra <= coalesce(e.til_dato, e.dato) and a.til >= e.dato), '[]'::json))
-  from public.events e where e.id = p_id
+  from public.cal_events e where e.id = p_id
 $$;
 revoke all on function public._event_json(bigint) from public, anon, authenticated;
 
@@ -78,7 +78,7 @@ begin
   if not public.is_member() then raise exception 'not_member'; end if;
   return json_build_object(
     'events', coalesce((select json_agg(public._event_json(e.id) order by e.dato, e.tid nulls first)
-                          from public.events e
+                          from public.cal_events e
                          where e.dato <= p_til and coalesce(e.til_dato, e.dato) >= p_fra), '[]'::json),
     'absences', coalesce((select json_agg(json_build_object(
                              'id', a.id, 'member_id', a.member_id, 'name', m.name, 'fra', a.fra, 'til', a.til,
@@ -140,12 +140,12 @@ begin
   p_info := nullif(left(trim(coalesce(p_info, '')), 2000), '');
   p_arranger := nullif(left(trim(coalesce(p_arranger, '')), 80), '');
   if p_id is null then
-    insert into public.events (title, dato, tid, til_dato, place, link, info, arranger, created_by, created_name)
+    insert into public.cal_events (title, dato, tid, til_dato, place, link, info, arranger, created_by, created_name)
     values (p_title, p_dato, p_tid, p_til_dato, p_place, p_link, p_info, p_arranger, auth.uid(),
             (select name from public.members where id = auth.uid()))
     returning id into v_id;
   else
-    update public.events set title = p_title, dato = p_dato, tid = p_tid, til_dato = p_til_dato,
+    update public.cal_events set title = p_title, dato = p_dato, tid = p_tid, til_dato = p_til_dato,
            place = p_place, link = p_link, info = p_info, arranger = p_arranger
      where id = p_id and (created_by = auth.uid() or public._is_member_leader())
     returning id into v_id;
@@ -159,7 +159,7 @@ create or replace function public.event_delete(p_id bigint)
 returns void language plpgsql volatile security definer set search_path = public as $$
 begin
   if not public.is_member() then raise exception 'not_member'; end if;
-  delete from public.events where id = p_id and (created_by = auth.uid() or public._is_member_leader());
+  delete from public.cal_events where id = p_id and (created_by = auth.uid() or public._is_member_leader());
   if not found then raise exception 'not_allowed'; end if;
 end $$;
 grant execute on function public.event_delete(bigint) to authenticated;
@@ -168,7 +168,7 @@ create or replace function public.event_answer(p_id bigint, p_svar boolean)
 returns json language plpgsql volatile security definer set search_path = public as $$
 begin
   if not public.is_member() then raise exception 'not_member'; end if;
-  if not exists (select 1 from public.events where id = p_id) then raise exception 'not_found'; end if;
+  if not exists (select 1 from public.cal_events where id = p_id) then raise exception 'not_found'; end if;
   if p_svar is null then
     delete from public.event_rsvp where event_id = p_id and member_id = auth.uid();
   else
@@ -183,12 +183,12 @@ grant execute on function public.event_answer(bigint, boolean) to authenticated;
 create or replace function public.event_share(p_id bigint)
 returns bigint language plpgsql volatile security definer set search_path = public as $$
 declare
-  v_e public.events;
+  v_e public.cal_events;
   v_tekst text;
   v_id bigint;
 begin
   if not public.is_member() then raise exception 'not_member'; end if;
-  select * into v_e from public.events where id = p_id;
+  select * into v_e from public.cal_events where id = p_id;
   if not found then raise exception 'not_found'; end if;
   v_tekst := '📅 ' || v_e.title || ' – ' || to_char(v_e.dato, 'DD.MM.YYYY')
              || coalesce(' kl. ' || to_char(v_e.tid, 'HH24:MI'), '')
