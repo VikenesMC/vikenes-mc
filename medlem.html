@@ -57,6 +57,32 @@
     .post .meta { color: var(--dempa); font-size: 14px; }
     .post .rad button { margin-top: 6px; }
     @media (max-width: 480px) { .saldoar { grid-template-columns: 1fr; } }
+
+    /* ---------- Kalender ---------- */
+    .mnd-topp { display: flex; justify-content: space-between; align-items: center; }
+    .mnd-topp h2 { margin: 0; font-size: 22px; text-transform: capitalize; }
+    .mnd-topp button { margin: 0; padding: 6px 14px; }
+    .kal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 12px; }
+    .kal .vd { text-align: center; font-size: 12px; color: var(--dempa); padding: 2px 0; }
+    .kal .dag { background: #222; border-radius: 6px; min-height: 52px; padding: 3px; font-size: 13px; cursor: pointer;
+      border: 2px solid transparent; display: flex; flex-direction: column; gap: 2px; }
+    .kal .dag.annan { opacity: .35; }
+    .kal .dag.idag { border-color: #666; }
+    .kal .dag.vald { border-color: var(--oransje); }
+    .kal .dag .nr { font-weight: bold; }
+    .kal .merke-treff { background: var(--oransje); color: #000; border-radius: 4px; font-size: 10px; font-weight: bold;
+      padding: 1px 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .kal .merke-borte { color: var(--dempa); font-size: 11px; }
+    .treff { background: #222; border-left: 4px solid var(--oransje); border-radius: 8px; padding: 12px; margin-top: 10px; }
+    .treff h3 { margin: 0 0 4px; }
+    .treff .smaa { color: var(--dempa); font-size: 14px; }
+    .jane { display: flex; gap: 8px; margin-top: 8px; }
+    .jane button { margin: 0; flex: 1; background: #333; color: #fff; }
+    .jane button.vald-ja { background: var(--gronn); color: #000; }
+    .jane button.vald-nei { background: var(--raud); color: #000; }
+    .mld .treffkort { background: #1a1a1a; border: 1px solid #444; border-radius: 10px; padding: 8px 10px; margin-top: 6px; font-size: 14px; color: #fff; }
+    .mld.min .treffkort { color: #fff; }
+    .mld .treffkort .jane button { padding: 6px; font-size: 14px; }
     .faner2 button.aktiv { background: var(--oransje); color: #000; }
     .medlem { padding: 12px 0; border-bottom: 1px solid var(--linje); }
     .medlem:last-child { border-bottom: 0; }
@@ -271,6 +297,7 @@
         </div>
         <div class="faner2">
           <button data-fane="chat" onclick="visFane('chat')">Chat</button>
+          <button data-fane="kalender" onclick="visFane('kalender')">Kalender</button>
           <button data-fane="arkiv" onclick="visFane('arkiv')">Arkiv</button>
           ${meg.regnskap ? `<button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>` : ""}
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
@@ -291,6 +318,7 @@
       if (f === "chat") return visChat();
       if (f === "arkiv") return visArkiv();
       if (f === "regnskap") return visRegnskap();
+      if (f === "kalender") return visKalender();
       if (f === "nyheiter") return visNyheiter();
       if (f === "gjestebok") return visGjestebok();
       try { liste = await rpc("member_list"); }
@@ -354,7 +382,7 @@
       if (!chat.dagar.has(dag)) { chat.dagar.add(dag); skil = `<div class="dag">${esc(dagTekst(m.created_at))}</div>`; }
       return `${skil}<div class="mld ${min ? "min" : ""}" data-id="${m.id}">
           ${min ? "" : `<div class="kven">${esc(m.author)}</div>`}
-          <div class="boble">${esc(m.body)}</div>
+          <div class="boble">${esc(m.body)}${m.event ? treffkortHtml(m.event) : ""}</div>
           <div class="meta">${esc(klokke(m.created_at))} ·
             <button onclick="visSettAv(${m.id})">Sett av <span class="sett">${m.seen}</span> av ${chat.total}</button></div>
         </div>`;
@@ -726,6 +754,218 @@
         await db.storage.from("arkiv").remove([sti]);
       } catch (e) { alert(e.message); }
       visArkiv();
+    }
+
+    // ---------------- Kalender ----------------
+    const FRAVAER = { jobb: "💼 Jobb", ferie: "🏖️ Ferie", vekk: "✈️ Bortreist" };
+    let kalMnd = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
+    let kalValt = null;       // ISO-dato for dagen som er vald
+    let kalData = null;
+    let kalSkjema = null;     // null | {type:"treff", e} | {type:"fravaer", a}
+
+    function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+    function treffDato(e) {
+      const f = datoKort(e.dato) + (e.tid ? ` kl. ${e.tid}` : "");
+      return e.til_dato && e.til_dato !== e.dato ? `${f} – ${datoKort(e.til_dato)}` : f;
+    }
+    function erLeiarEllerEigar(e) { return meg.leader || e.created_by === meg.id; }
+
+    async function visKalender() {
+      if (!kalValt) kalValt = iso(new Date());
+      // Rutenettet startar på måndag
+      const forste = new Date(kalMnd);
+      const start = new Date(forste); start.setDate(1 - ((forste.getDay() + 6) % 7));
+      const slutt = new Date(start); slutt.setDate(start.getDate() + 41);
+      try { kalData = await rpc("cal_range", { p_fra: iso(start), p_til: iso(slutt) }); }
+      catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const idagIso = iso(new Date());
+      let celler = "";
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(start); d.setDate(start.getDate() + i);
+        const di = iso(d);
+        const treff = kalData.events.filter(e => e.dato <= di && (e.til_dato || e.dato) >= di);
+        const borte = kalData.absences.filter(a => a.fra <= di && a.til >= di);
+        celler += `<div class="dag ${d.getMonth() !== kalMnd.getMonth() ? "annan" : ""} ${di === idagIso ? "idag" : ""} ${di === kalValt ? "vald" : ""}"
+            onclick="kalValt='${di}'; kalSkjema=null; visKalender()">
+          <span class="nr">${d.getDate()}</span>
+          ${treff.slice(0, 2).map(e => `<span class="merke-treff">${esc(e.title)}</span>`).join("")}
+          ${treff.length > 2 ? `<span class="merke-treff">+${treff.length - 2}</span>` : ""}
+          ${borte.length ? `<span class="merke-borte">🚫 ${borte.length}</span>` : ""}
+        </div>`;
+      }
+      const dagTreff = kalData.events.filter(e => e.dato <= kalValt && (e.til_dato || e.dato) >= kalValt);
+      const dagBorte = kalData.absences.filter(a => a.fra <= kalValt && a.til >= kalValt);
+      const valtDato = new Date(kalValt + "T12:00:00");
+      document.getElementById("fane").innerHTML = `
+        <div class="kort">
+          <div class="mnd-topp">
+            <button class="sekundar" onclick="kalMnd.setMonth(kalMnd.getMonth() - 1); kalMnd = new Date(kalMnd); kalSkjema=null; visKalender()">◀</button>
+            <h2>${kalMnd.toLocaleDateString("nb-NO", { month: "long", year: "numeric" })}</h2>
+            <button class="sekundar" onclick="kalMnd.setMonth(kalMnd.getMonth() + 1); kalMnd = new Date(kalMnd); kalSkjema=null; visKalender()">▶</button>
+          </div>
+          <div class="kal">
+            ${["Må", "Ty", "On", "To", "Fr", "La", "Sø"].map(v => `<div class="vd">${v}</div>`).join("")}
+            ${celler}
+          </div>
+          <div class="rad" style="margin-top:12px">
+            <button onclick="kalSkjema={type:'treff', e:null}; visKalender()">＋ Nytt treff</button>
+            <button class="sekundar" onclick="kalSkjema={type:'fravaer', a:null}; visKalender()">＋ Legg inn fråvær</button>
+          </div>
+        </div>
+        ${kalSkjema ? kalSkjemaHtml() : ""}
+        <div class="kort">
+          <h2 style="margin-top:0; text-transform:capitalize">${valtDato.toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long" })}</h2>
+          ${dagTreff.map(treffHtml).join("") || '<p class="dempa" style="margin:0">Ingen treff denne dagen.</p>'}
+          ${dagBorte.length ? `<p style="margin:14px 0 0"><b>Borte:</b> ${dagBorte.map(a =>
+              `${esc(a.name)} <span class="dempa">(${FRAVAER[a.type]}${a.note ? " – " + esc(a.note) : ""})</span>`).join(", ")}</p>` : ""}
+        </div>
+        <div class="kort">
+          <h2 style="margin-top:0">Mitt fråvær</h2>
+          ${kalData.mine_fravaer.map(a => `<div class="medlem">
+              <div class="namn">${FRAVAER[a.type]} ${datoKort(a.fra)}${a.til !== a.fra ? " – " + datoKort(a.til) : ""}</div>
+              ${a.note ? `<div class="info">${esc(a.note)}</div>` : ""}
+              <div class="rad">
+                <button class="sekundar liten" style="margin-top:8px" onclick='kalSkjema={type:"fravaer", a:${JSON.stringify(a).replace(/'/g, "&#39;")}}; visKalender()'>Endre</button>
+                <button class="fare liten" style="margin-top:8px" onclick="slettFravaer(${a.id})">Slett</button>
+              </div></div>`).join("") || '<p class="dempa" style="margin:0">Du har ikkje lagt inn noko fråvær framover.</p>'}
+        </div>`;
+      if (kalSkjema) document.getElementById("kalskjema")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function svarKnappar(e, kjelde) {
+      return `<div class="jane">
+        <button class="${e.mitt === true ? "vald-ja" : ""}" onclick="svarTreff(${e.id}, ${e.mitt === true ? "null" : "true"}, '${kjelde}')">👍 Ja${e.ja.length ? " (" + e.ja.length + ")" : ""}</button>
+        <button class="${e.mitt === false ? "vald-nei" : ""}" onclick="svarTreff(${e.id}, ${e.mitt === false ? "null" : "false"}, '${kjelde}')">👎 Nei${e.nei.length ? " (" + e.nei.length + ")" : ""}</button>
+      </div>`;
+    }
+
+    function treffHtml(e) {
+      return `<div class="treff">
+        <h3>${esc(e.title)}</h3>
+        <div class="smaa">📅 ${treffDato(e)}${e.place ? " · 📍 " + esc(e.place) : ""}${e.arranger ? " · " + esc(e.arranger) : ""}</div>
+        ${e.info ? `<p style="white-space:pre-line; margin:8px 0 0">${esc(e.info)}</p>` : ""}
+        ${e.link ? `<p style="margin:6px 0 0"><a href="${esc(e.link)}" target="_blank" rel="noopener">Meir info ↗</a></p>` : ""}
+        ${svarKnappar(e, "kal")}
+        <p class="smaa" style="margin:8px 0 0">
+          ${e.ja.length ? "👍 " + e.ja.map(esc).join(", ") : ""}${e.ja.length && e.nei.length ? "<br>" : ""}
+          ${e.nei.length ? "👎 " + e.nei.map(esc).join(", ") : ""}
+          ${e.borte.length ? `<br>🚫 Borte: ${e.borte.map(b => esc(b.name) + " (" + FRAVAER[b.type].split(" ")[1].toLowerCase() + ")").join(", ")}` : ""}
+        </p>
+        <div class="rad">
+          <button class="liten" style="margin-top:8px" onclick="delTreff(${e.id})">💬 Del i chatten</button>
+          ${erLeiarEllerEigar(e) ? `<button class="sekundar liten" style="margin-top:8px" onclick="redigerTreff(${e.id})">Endre</button>
+            <button class="fare liten" style="margin-top:8px" onclick="slettTreff(${e.id})">Slett</button>` : ""}
+        </div>
+        <div class="smaa" style="margin-top:6px; font-size:12px">Lagt inn av ${esc(e.created_name || "–")}</div>
+      </div>`;
+    }
+
+    function kalSkjemaHtml() {
+      if (kalSkjema.type === "treff") {
+        const e = kalSkjema.e || {};
+        return `<div class="kort" id="kalskjema">
+          <h2 style="margin-top:0">${e.id ? "Endre treff" : "Nytt treff"}</h2>
+          <label for="t-tittel">Kva er det?</label>
+          <input id="t-tittel" maxlength="120" placeholder="t.d. Sommartreff hos Eid MC" value="${esc(e.title || "")}">
+          <div class="rad" style="align-items:flex-start">
+            <div style="flex:1; min-width:140px"><label for="t-dato">Dato</label><input id="t-dato" type="date" value="${e.dato || kalValt}"></div>
+            <div style="flex:1; min-width:110px"><label for="t-tid">Klokka (valfritt)</label><input id="t-tid" type="time" value="${e.tid || ""}"></div>
+          </div>
+          <label for="t-til">Siste dag (om det varer fleire dagar)</label>
+          <input id="t-til" type="date" value="${e.til_dato || ""}">
+          <label for="t-arr">Kven arrangerer?</label>
+          <input id="t-arr" maxlength="80" placeholder="t.d. Vikenes MC eller Eid MC" value="${esc(e.arranger || "")}">
+          <label for="t-stad">Stad (valfritt)</label>
+          <input id="t-stad" maxlength="120" value="${esc(e.place || "")}">
+          <label for="t-lenkje">Lenkje (valfritt, https://…)</label>
+          <input id="t-lenkje" placeholder="https://www.facebook.com/events/…" value="${esc(e.link || "")}">
+          <label for="t-info">Meir info (valfritt)</label>
+          <textarea id="t-info" rows="3" maxlength="2000">${esc(e.info || "")}</textarea>
+          <div class="rad" style="margin-top:12px">
+            <button onclick="lagreTreff(${e.id || "null"})">💾 Lagre</button>
+            <button class="sekundar" onclick="kalSkjema=null; visKalender()">Avbryt</button>
+          </div>
+          <p id="k-melding" class="feil" style="margin-bottom:0"></p>
+        </div>`;
+      }
+      const a = kalSkjema.a || {};
+      return `<div class="kort" id="kalskjema">
+        <h2 style="margin-top:0">${a.id ? "Endre fråvær" : "Legg inn fråvær"}</h2>
+        <div class="jane">
+          ${Object.entries(FRAVAER).map(([k, n]) => `<label style="flex:1; margin:0; background:#333; border-radius:8px; padding:10px; text-align:center; cursor:pointer">
+            <input type="radio" name="f-type" value="${k}" ${(a.type || "jobb") === k ? "checked" : ""}> ${n}</label>`).join("")}
+        </div>
+        <div class="rad" style="align-items:flex-start">
+          <div style="flex:1; min-width:140px"><label for="f-fra">Frå</label><input id="f-fra" type="date" value="${a.fra || kalValt}"></div>
+          <div style="flex:1; min-width:140px"><label for="f-til">Til og med</label><input id="f-til" type="date" value="${a.til || kalValt}"></div>
+        </div>
+        <label for="f-note">Merknad (valfritt)</label>
+        <input id="f-note" maxlength="200" placeholder="t.d. nattskift" value="${esc(a.note || "")}">
+        <div class="rad" style="margin-top:12px">
+          <button onclick="lagreFravaer(${a.id || "null"})">💾 Lagre</button>
+          <button class="sekundar" onclick="kalSkjema=null; visKalender()">Avbryt</button>
+        </div>
+        <p id="k-melding" class="feil" style="margin-bottom:0"></p>
+      </div>`;
+    }
+
+    const kalFeil = { bad_title: "Skriv kva treffet heiter (2–120 teikn).", bad_dates: "Sjekk datoane.", bad_link: "Lenkja må starte med https://",
+      too_long: "Fråvær kan vere maks eitt år om gongen.", not_allowed: "Berre den som la inn treffet, eller President/Vice President, kan endre det." };
+
+    async function lagreTreff(id) {
+      const v = k => document.getElementById(k).value;
+      try {
+        await rpc("event_save", { p_id: id, p_title: v("t-tittel"), p_dato: v("t-dato"), p_tid: v("t-tid") || null,
+          p_til_dato: v("t-til") || null, p_place: v("t-stad"), p_link: v("t-lenkje"), p_info: v("t-info"), p_arranger: v("t-arr") });
+      } catch (e) { document.getElementById("k-melding").textContent = kalFeil[e.message] || e.message; return; }
+      kalValt = v("t-dato"); const d = new Date(kalValt + "T12:00:00"); kalMnd = new Date(d.getFullYear(), d.getMonth(), 1);
+      kalSkjema = null; visKalender();
+    }
+
+    async function lagreFravaer(id) {
+      const v = k => document.getElementById(k).value;
+      const type = document.querySelector('input[name="f-type"]:checked')?.value;
+      try { await rpc("absence_save", { p_id: id, p_fra: v("f-fra"), p_til: v("f-til"), p_type: type, p_note: v("f-note") }); }
+      catch (e) { document.getElementById("k-melding").textContent = kalFeil[e.message] || e.message; return; }
+      kalSkjema = null; visKalender();
+    }
+
+    function redigerTreff(id) { kalSkjema = { type: "treff", e: kalData.events.find(e => e.id === id) }; visKalender(); }
+
+    async function slettTreff(id) {
+      if (!confirm("Slette treffet? Svara blir òg sletta.")) return;
+      try { await rpc("event_delete", { p_id: id }); } catch (e) { alert(kalFeil[e.message] || e.message); }
+      visKalender();
+    }
+
+    async function slettFravaer(id) {
+      if (!confirm("Slette fråværet?")) return;
+      try { await rpc("absence_delete", { p_id: id }); } catch (e) { alert(e.message); }
+      visKalender();
+    }
+
+    async function svarTreff(id, svar, kjelde) {
+      let e;
+      try { e = await rpc("event_answer", { p_id: id, p_svar: svar }); } catch (err) { return alert(err.message); }
+      if (kjelde === "kal") return visKalender();
+      // I chatten: oppdater alle treffkort for dette treffet
+      document.querySelectorAll(`.treffkort[data-treff="${id}"]`).forEach(k => k.outerHTML = treffkortHtml(e));
+    }
+
+    async function delTreff(id) {
+      if (!confirm("Dele treffet i chatten? Alle får varsel og kan svare Ja eller Nei.")) return;
+      try {
+        const mid = await rpc("event_share", { p_id: id });
+        db.functions.invoke("chat-push", { body: { action: "send", message_id: mid } }).catch(() => {});
+      } catch (e) { return alert(e.message); }
+      visFane("chat");
+    }
+
+    function treffkortHtml(e) {
+      return `<div class="treffkort" data-treff="${e.id}">
+        <b>${esc(e.title)}</b><br><span class="dempa">${treffDato(e)}${e.place ? " · " + esc(e.place) : ""}</span>
+        ${svarKnappar(e, "chat")}
+      </div>`;
     }
 
     // ---------------- Regnskap (President og Treasurer) ----------------
