@@ -347,7 +347,7 @@
           <input id="n-tittel" maxlength="120" value="${esc(n.title || "")}">
           <label for="n-tekst">Tekst</label>
           <textarea id="n-tekst" rows="8" maxlength="5000">${esc(n.body || "")}</textarea>
-          <label for="n-lenkje">Lenkje (valfritt) – t.d. quiz.html eller https://…</label>
+          <label for="n-lenkje">Lenkje (valfritt) – t.d. #quiz, quiz.html eller https://…</label>
           <input id="n-lenkje" value="${esc(n.link_url || "")}" placeholder="quiz.html">
           <label for="n-lenkjetekst">Tekst på knappen (valfritt)</label>
           <input id="n-lenkjetekst" value="${esc(n.link_text || "")}" placeholder="Meld deg på">
@@ -368,7 +368,7 @@
           p_link_url: v("n-lenkje"), p_link_text: v("n-lenkjetekst"), p_published: publiser });
       } catch (e) {
         const t = { bad_title: "Overskrifta må vere 2–120 teikn.", bad_body: "Teksten er for lang.",
-                    bad_link: "Lenkja må starte med https:// eller vere ei side her, t.d. quiz.html.",
+                    bad_link: "Lenkja må starte med https://, vere ei side her (t.d. quiz.html) eller ein bolk på framsida (t.d. #quiz).",
                     not_allowed: "Berre President, Vice President og Secretary kan skrive nyheiter." }[e.message] || e.message;
         document.getElementById("n-feil").textContent = t;
         return;

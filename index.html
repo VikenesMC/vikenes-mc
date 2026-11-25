@@ -134,8 +134,6 @@
     /* Om klubben */
     .om { display: grid; grid-template-columns: 1fr 260px; gap: 32px; align-items: center; }
     .om img { width: 100%; filter: drop-shadow(0 0 2px rgba(255,255,255,.5)); }
-    .torsdag { margin-top: 20px; background: var(--oransje); color: #000; border-radius: 10px; padding: 16px 20px; font-size: 18px; }
-    .torsdag b { display: block; font-size: 21px; }
     @media (max-width: 760px) { .om { grid-template-columns: 1fr; } .om img { max-width: 200px; margin: 0 auto; display: block; } }
 
     /* Kontakt */
@@ -161,6 +159,7 @@
         <a href="#nyheiter">Nyheiter</a>
         <a href="#quiz">MC Quiz</a>
         <a href="#om">Om klubben</a>
+        <a href="#torsdag">Torsdagskafé</a>
         <a href="#kontakt">Kontakt</a>
         <a class="logginn" href="medlem.html">Medlem? Logg inn</a>
       </nav>
@@ -226,14 +225,18 @@
       <div>
         <h2>Om klubben</h2>
         <p class="ingress">Vikenes MC starta i 2011. Klubben er 12 personar med felles interesse.</p>
-        <p>Vi har flotte lokale på Vikeneset i Volda, med opphaldsrom, verkstad og lager.</p>
-        <div class="torsdag" id="torsdag">
-          <b>☕ Torsdagskafé</b>
-          Torsdagar frå kl. 18:00 er de velkomne til kaffi og ein prat med gutta i klubben.
-          Vi sel is, brus og potetgull.
-        </div>
+        <p class="ingress">Vi har flotte lokale på Vikeneset i Volda, med opphaldsrom, verkstad og lager.</p>
       </div>
       <img src="logo.png" alt="Klubblogoen til Vikenes MC">
+    </div>
+  </section>
+
+  <section id="torsdag">
+    <div class="inn">
+      <h2>Torsdagskafé</h2>
+      <p class="ingress">Torsdagar frå kl. 18:00 er de velkomne til kaffi og ein prat med gutta i klubben.
+        Vi sel is, brus og potetgull.</p>
+      <p style="margin-top:18px"><a class="knapp" href="#kontakt">Finn oss</a></p>
     </div>
   </section>
 
@@ -276,7 +279,7 @@
       document.getElementById("nav").classList.remove("open")));
 
     function trygLenkje(u) {
-      return /^https:\/\/[^\s<>"]+$/.test(u) || /^[a-z0-9_\-]+\.html(\?[^\s<>"]*)?$/.test(u);
+      return /^https:\/\/[^\s<>"]+$/.test(u) || /^([a-z0-9_\-]+\.html(\?[^\s<>"#]*)?)?(#[a-z0-9_\-]+)?$/.test(u) && u !== "";
     }
 
     async function lastNyheiter() {
