@@ -967,14 +967,36 @@
               <input type="checkbox" id="g-fors" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
               Sykkelen har gyldig lagringsforsikring med brannforsikring (5.2)</label>
             <button style="margin-top:10px" onclick="meldLagring()">Meld inn til lagring</button>
-            <p class="dempa" style="font-size:13px">Pris: kr 1500 per vintersesong (5.4). Maks to syklar per medlem (5.1).</p>
+            <div class="treff" style="font-size:14px">
+              <b>Pris per vintersesong</b><br>
+              Fullt medlem: 2 syklar gratis<br>
+              Prospect: 1 gratis + 1 til 1000 kr<br>
+              Hangaround: 1 sykkel til 1000 kr<br>
+              Utanfor klubben: 1800 kr per sykkel (må godkjennast av styret, 5.3)
+            </div>
             <h3>Lagra denne sesongen (${s.bikes.length})</h3>
-            ${s.bikes.map(b => `<div class="komande" style="cursor:default">
-                <div style="flex:1; min-width:0"><b>${esc(b.bike)}</b>${b.reg_nr ? " · " + esc(b.reg_nr) : ""}
-                  <div class="smaa">${esc(b.member_name || "–")}${b.owner_note && b.owner_note !== "Eigen" ? " · " + esc(b.owner_note) : ""} · ✅ forsikra</div></div>
-                ${b.mine || meg.styre ? `<button class="fare liten" onclick="fjernLagring(${b.id})">Fjern</button>` : ""}
+            ${s.can_pay ? `<p class="smaa" style="margin-top:0">Til saman ${kr(s.total)} · betalt ${kr(s.paid_total)} · utestår ${kr(s.total - s.paid_total)}</p>` : ""}
+            ${s.bikes.map(b => `<div class="komande" style="cursor:default; flex-wrap:wrap">
+                <div style="flex:1; min-width:180px"><b>${esc(b.bike)}</b>${b.reg_nr ? " · " + esc(b.reg_nr) : ""}
+                  <div class="smaa">${esc(b.member_name || "–")}${b.guest ? " · utanfor klubben" : b.owner_note && b.owner_note !== "Eigen" ? " · " + esc(b.owner_note) : ""} · ✅ forsikra</div>
+                  <div class="smaa">${b.price ? `${kr(b.price)} · ${b.paid ? `<span style="color:var(--gronn)">✅ Betalt${b.paid_by_name ? " (merkt av " + esc(b.paid_by_name) + ")" : ""}</span>` : `<span style="color:var(--raud)">⏳ Ikkje betalt</span>`}` : "Gratis"}</div></div>
+                <div class="rad" style="gap:6px">
+                  ${s.can_pay && b.price ? `<button class="${b.paid ? "sekundar" : ""} liten" onclick="settBetalt(${b.id}, ${!b.paid})">${b.paid ? "Angre betalt" : "✔ Merk betalt"}</button>` : ""}
+                  ${b.mine || meg.styre || s.can_pay ? `<button class="fare liten" onclick="fjernLagring(${b.id})">Fjern</button>` : ""}
+                </div>
               </div>`).join("") || '<p class="dempa" style="margin:0">Ingen syklar meldt inn enno.</p>'}
-          </div>`;
+          </div>
+          ${s.can_pay ? `<div class="kort">
+            <h2 style="margin-top:0">Legg inn sykkel for nokon utanfor klubben</h2>
+            <p class="dempa" style="margin-top:0">1800 kr per sykkel. Må vere godkjent av styret (5.3).</p>
+            <label for="u-namn">Namn på eigar</label><input id="u-namn" maxlength="80">
+            <label for="u-mc">Motorsykkel (merke og modell)</label><input id="u-mc" maxlength="100">
+            <label for="u-reg">Reg.nr.</label><input id="u-reg" maxlength="10">
+            <label style="display:flex; gap:8px; align-items:center; margin-top:8px; cursor:pointer">
+              <input type="checkbox" id="u-fors" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
+              Sykkelen har gyldig lagringsforsikring med brannforsikring (5.2)</label>
+            <button style="margin-top:10px" onclick="meldLagringGjest()">Legg inn</button>
+          </div>` : ""}`;
         } else if (khDel === "brygging") {
           fane.innerHTML = meny + `<div class="kort">
             <h2 style="margin-top:0">🍺 Brygging</h2>
@@ -1041,9 +1063,21 @@
         await rpc("storage_add", { p_bike: document.getElementById("g-mc").value, p_reg_nr: document.getElementById("g-reg").value,
           p_owner_note: document.getElementById("g-eigar").value, p_insured: true });
       } catch (e) {
-        return alert({ max_two: "Du kan lagre maks to syklar (husregel 5.1).", bad_text: "Skriv merke og modell.",
-                       not_insured: "Sykkelen må ha lagringsforsikring." }[e.message] || e.message);
+        return alert({ max_bikes: meg.role === "Hangaround" ? "Hangaround kan lagre éin sykkel." : "Du kan lagre maks to syklar (husregel 5.1).",
+                       bad_text: "Skriv merke og modell.", not_insured: "Sykkelen må ha lagringsforsikring." }[e.message] || e.message);
       }
+      visKlubbhus();
+    }
+    async function meldLagringGjest() {
+      if (!document.getElementById("u-fors").checked) return alert("Sykkelen må ha lagringsforsikring med brannforsikring (husregel 5.2).");
+      try {
+        await rpc("storage_add_guest", { p_name: document.getElementById("u-namn").value, p_bike: document.getElementById("u-mc").value,
+          p_reg_nr: document.getElementById("u-reg").value, p_insured: true });
+      } catch (e) { return alert(e.message === "bad_text" ? "Skriv namn og motorsykkel." : e.message); }
+      visKlubbhus();
+    }
+    async function settBetalt(id, ja) {
+      try { await rpc("storage_set_paid", { p_id: id, p_paid: ja }); } catch (e) { alert(e.message); }
       visKlubbhus();
     }
     async function fjernLagring(id) {
