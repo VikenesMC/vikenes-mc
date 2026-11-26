@@ -113,6 +113,19 @@
     .komande:first-of-type { border-top: 0; }
     .komande .kdato { width: 52px; flex: none; text-align: center; font-weight: bold; color: var(--oransje); font-size: 18px; line-height: 1.1; }
     .komande .kdato span { display: block; font-size: 11px; font-weight: normal; color: var(--dempa); }
+    .album-rutenett { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+    .album { cursor: pointer; background: #1b1b1b; border: 1px solid #333; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+    .album img, .album .tomt { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: flex; align-items: center; justify-content: center; font-size: 34px; background: #222; }
+    .album b { padding: 8px 10px 0; } .album .smaa { padding: 0 10px 8px; }
+    .bilete-rutenett { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+    .bilete { background: #1b1b1b; border: 2px solid #333; border-radius: 8px; overflow: hidden; }
+    .bilete.delt { border-color: var(--oransje); }
+    .bilete img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; cursor: zoom-in; background: #222; }
+    .bilete-meny { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; font-size: 13px; }
+    .bilete-meny label { display: flex; gap: 4px; align-items: center; margin: 0; cursor: pointer; }
+    .bilete-meny input { width: 18px; height: 18px; margin: 0; accent-color: var(--oransje); }
+    .bilete-meny button { margin: 0; padding: 2px 6px; }
+    .knapp-fil { background: var(--oransje); color: #000; font-weight: bold; padding: 8px 14px; border-radius: 8px; cursor: pointer; margin: 0; }
     details.reglar { background: #1b1b1b; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; margin: 6px 0 10px; }
     details.reglar summary { cursor: pointer; color: var(--oransje); font-weight: bold; }
     details.reglar p { font-size: 14px; line-height: 1.5; margin: 8px 0 0; }
@@ -338,6 +351,7 @@
           <button data-fane="chat" onclick="visFane('chat')">Chat</button>
           <button data-fane="kalender" onclick="visFane('kalender')">Kalender</button>
           <button data-fane="arkiv" onclick="visFane('arkiv')">Arkiv</button>
+          <button data-fane="bilete" onclick="visFane('bilete')">Bilete</button>
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
           <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
           <button data-fane="arsmote" onclick="visFane('arsmote')">Saker</button>
@@ -368,6 +382,7 @@
       if (f === "gjestebok") return visGjestebok();
       if (f === "president") return visPresident();
       if (f === "arsmote") return visArsmote();
+      if (f === "bilete") return visBilete();
       if (f === "klubbhus") return visKlubbhus();
       try { liste = await rpc("member_list"); }
       catch (e) { return start(); }
@@ -847,6 +862,119 @@
       if (!confirm("Stengje avstemminga og vise resultatet til alle? Ingen kan røyste etterpå.")) return;
       try { await rpc("agm_vote_close", { p_id: id }); } catch (e) { alert(e.message); }
       visArsmote();
+    }
+
+    // ---------------- Bilete: album + «Vis på framsida» ----------------
+    let aktivAlbum = null;
+    let bileteListe = [];
+
+    async function signerteUrlar(stiar) {
+      if (!stiar.length) return {};
+      const { data } = await db.storage.from("bilete").createSignedUrls(stiar, 3600);
+      const ut = {};
+      (data || []).forEach(d => { if (d.signedUrl) ut[d.path] = d.signedUrl; });
+      return ut;
+    }
+
+    async function visBilete() {
+      const fane = document.getElementById("fane");
+      let a;
+      try { a = await rpc("album_list"); } catch (e) { fane.innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      if (aktivAlbum && !a.albums.some(x => x.id === aktivAlbum)) aktivAlbum = null;
+      if (!aktivAlbum) {
+        const url = await signerteUrlar(a.albums.map(x => x.cover).filter(Boolean));
+        fane.innerHTML = `<div class="kort">
+          <h2 style="margin-top:0">📷 Album</h2>
+          <div class="album-rutenett">
+            ${a.albums.map(x => `<div class="album" onclick="aktivAlbum=${x.id}; visBilete()">
+                ${x.cover && url[x.cover] ? `<img src="${url[x.cover]}" alt="">` : `<div class="tomt">📷</div>`}
+                <b>${esc(x.name)}</b><span class="smaa">${x.count} bilete${x.shared ? ` · ${x.shared} på framsida` : ""}</span>
+              </div>`).join("") || '<p class="dempa">Ingen album enno.</p>'}
+          </div>
+          <div class="skrivfelt" style="margin-top:14px">
+            <input id="a-namn" maxlength="60" placeholder="Namn på nytt album" style="flex:1; margin:0">
+            <button onclick="nyttAlbum()">＋ Nytt album</button>
+          </div>
+        </div>`;
+        return;
+      }
+      const alb = a.albums.find(x => x.id === aktivAlbum);
+      try { bileteListe = await rpc("photo_list", { p_album: aktivAlbum }); } catch (e) { fane.innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const url = await signerteUrlar(bileteListe.map(p => p.path));
+      fane.innerHTML = `<div class="kort">
+        <div class="rad" style="justify-content:space-between">
+          <button class="sekundar liten" onclick="aktivAlbum=null; visBilete()">◀ Alle album</button>
+          <label class="knapp-fil">📤 Last opp bilete
+            <input type="file" accept="image/*" multiple style="display:none" onchange="lastOppBilete(this.files)"></label>
+        </div>
+        <h2>${esc(alb.name)} (${bileteListe.length})</h2>
+        ${a.can_share ? '<p class="dempa" style="margin-top:0">Huk av «Framsida» på bilete som skal visast på den opne sida.</p>' : ""}
+        <p id="b-status" class="dempa"></p>
+        <div class="bilete-rutenett">
+          ${bileteListe.map((p, i) => `<div class="bilete${p.shared ? " delt" : ""}">
+              <img src="${url[p.path] || ""}" alt="${esc(p.caption || "")}" loading="lazy" onclick="visStortBilete(${i})">
+              <div class="bilete-meny">
+                ${a.can_share ? `<label><input type="checkbox" ${p.shared ? "checked" : ""} onchange="delBilete(${p.id}, this)"> Framsida</label>` : (p.shared ? "<span>🌐 Framsida</span>" : "<span></span>")}
+                ${p.can_delete ? `<button class="fare liten" onclick="slettBilete(${p.id})">🗑️</button>` : ""}
+              </div>
+            </div>`).join("") || '<p class="dempa">Ingen bilete i dette albumet enno.</p>'}
+        </div>
+      </div>`;
+      window._bileteUrl = url;
+    }
+
+    async function nyttAlbum() {
+      const namn = document.getElementById("a-namn").value;
+      try { aktivAlbum = await rpc("album_create", { p_name: namn }); }
+      catch (e) { return alert(e.message === "bad_text" ? "Skriv eit namn på albumet." : e.message); }
+      visBilete();
+    }
+
+    async function lastOppBilete(filer) {
+      const status = document.getElementById("b-status");
+      let n = 0;
+      for (const f0 of filer) {
+        n++;
+        status.textContent = `Lastar opp ${n} av ${filer.length} …`;
+        const f = await krympBilete(f0);
+        const sti = `${aktivAlbum}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${(f.name.split(".").pop() || "jpg").toLowerCase()}`;
+        const { error } = await db.storage.from("bilete").upload(sti, f, { contentType: f.type || "image/jpeg" });
+        if (error) { alert(`Klarte ikkje å laste opp «${f0.name}»: ${error.message}`); continue; }
+        try { await rpc("photo_add", { p_album: aktivAlbum, p_path: sti, p_caption: null }); }
+        catch (e) { await db.storage.from("bilete").remove([sti]); alert(`Feil for «${f0.name}»: ${e.message}`); }
+      }
+      visBilete();
+    }
+
+    async function delBilete(id, boks) {
+      boks.disabled = true;
+      try { await rpc("photo_set_shared", { p_id: id, p_shared: boks.checked }); boks.closest(".bilete").classList.toggle("delt", boks.checked); }
+      catch (e) { boks.checked = !boks.checked; alert(e.message); }
+      boks.disabled = false;
+    }
+
+    async function slettBilete(id) {
+      if (!confirm("Slette biletet?")) return;
+      try { const sti = await rpc("photo_delete", { p_id: id }); await db.storage.from("bilete").remove([sti]); }
+      catch (e) { alert(e.message); }
+      visBilete();
+    }
+
+    function visStortBilete(i) {
+      const p = bileteListe[i]; if (!p) return;
+      const bak = document.createElement("div");
+      bak.className = "modal-bak";
+      bak.onclick = e => { if (e.target === bak) bak.remove(); };
+      bak.innerHTML = `<div class="modal" style="max-width:95vw; padding:10px">
+        <img src="${window._bileteUrl[p.path]}" style="max-width:100%; max-height:75vh; display:block; margin:0 auto; border-radius:6px">
+        <div class="rad" style="justify-content:space-between; margin-top:8px">
+          <button class="sekundar liten" ${i > 0 ? "" : "disabled"} onclick="this.closest('.modal-bak').remove(); visStortBilete(${i - 1})">◀</button>
+          <span class="smaa">${esc(p.uploaded_name || "")} · ${datoKort(p.created_at)}</span>
+          <button class="sekundar liten" ${i < bileteListe.length - 1 ? "" : "disabled"} onclick="this.closest('.modal-bak').remove(); visStortBilete(${i + 1})">▶</button>
+        </div>
+        <button class="stor" style="margin-top:8px" onclick="this.closest('.modal-bak').remove()">Lukk</button>
+      </div>`;
+      document.body.appendChild(bak);
     }
 
     // ---------------- Klubbhuset: husreglar + skjema ----------------
