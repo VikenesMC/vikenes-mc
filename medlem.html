@@ -915,16 +915,17 @@
 
     async function visKlubbhus() {
       const meny = `<div class="rad" style="margin-bottom:12px">${KH_DELAR.map(([k, n]) =>
-        `<button class="${k === khDel ? "" : "sekundar"} liten" onclick="khDel='${k}'; visKlubbhus()">${n}</button>`).join("")}</div>`;
+        `<button class="${k === khDel ? "" : "sekundar"} liten" onclick="khDel='${k}'; barRedigerer=null; visKlubbhus()">${n}</button>`).join("")}</div>`;
       const fane = document.getElementById("fane");
       try {
-        if (khDel === "kjokken") {
-          const l = await rpc("shop_list");
-          fane.innerHTML = meny + `<div class="kort">
-            <h2 style="margin-top:0">🛒 Handleliste</h2>
-            <p class="dempa" style="margin-top:0">Skriv opp det som manglar. Har du handla, trykk ✔ – då forsvinn det frå lista.</p>
+        if (khDel === "kjokken" || khDel === "bar") {
+          const omr = khDel;
+          const [b, l] = await Promise.all([rpc("bar_list", { p_area: omr }), omr === "kjokken" ? rpc("shop_list") : null]);
+          fane.innerHTML = meny + lagerHtml(omr, b) + (omr === "kjokken" ? `<div class="kort">
+            <h2 style="margin-top:0">📝 Ekstra handleliste</h2>
+            <p class="dempa" style="margin-top:0">For ting som ikkje er faste varer. Har du handla, trykk ✔ – då forsvinn det frå lista.</p>
             <div class="skrivfelt" style="margin-bottom:10px">
-              <input id="h-vare" maxlength="120" placeholder="t.d. kaffi, pappkrus, is" style="flex:1; margin:0"
+              <input id="h-vare" maxlength="120" placeholder="t.d. bursdagskake, lyspærer" style="flex:1; margin:0"
                 onkeydown="if (event.key === 'Enter') leggTilVare()">
               <button onclick="leggTilVare()">＋ Legg til</button>
             </div>
@@ -932,54 +933,8 @@
                 <div style="flex:1; min-width:0"><b>${esc(v.item)}</b>
                   <div class="smaa">${esc(v.added_name || "–")} · ${datoKort(v.created_at)}</div></div>
                 <button class="liten" onclick="handla(${v.id})">✔ Handla</button>
-              </div>`).join("") || '<p class="dempa" style="margin:0">Lista er tom – alt er handla 👍</p>'}
-          </div>`;
-        } else if (khDel === "bar") {
-          const b = await rpc("bar_list");
-          const mangel = b.items.filter(i => i.need > 0);
-          const sist = b.items.filter(i => i.counted_at).sort((x, y) => y.counted_at.localeCompare(x.counted_at))[0];
-          let kat = "";
-          fane.innerHTML = meny + `<div class="kort" style="border-top-color:${mangel.length ? "var(--gul)" : ""}">
-            <h2 style="margin-top:0">🛒 Må handlast (${mangel.length})</h2>
-            ${mangel.map(i => `<div class="komande" style="cursor:default">
-                <div style="flex:1; min-width:0"><b>Kjøp ${i.need} ${esc(i.unit)} ${esc(i.name)}</b>
-                  <div class="smaa">har ${i.count_qty} av ${i.max_qty}</div></div>
-                <button class="liten" onclick="barHandla(${i.id}, '${esc(i.name).replace(/'/g, "")}')">✔ Handla</button>
-              </div>`).join("") || `<p class="dempa" style="margin:0">${b.items.length ? "Ingenting manglar – baren er full 🍻" : "Ingen varer lagt inn enno."}</p>`}
-            ${sist ? `<p class="smaa" style="margin-bottom:0">Sist talt ${datoKort(sist.counted_at)} av ${esc(sist.counted_by_name || "–")}</p>` : ""}
-          </div>
-
-          ${b.items.length ? `<div class="kort">
-            <h2 style="margin-top:0">📋 Lagerteljing</h2>
-            <p class="dempa" style="margin-top:0">Skriv kor mange som står på lageret no, og trykk «Lagre teljing». Tomme felt blir ikkje endra.</p>
-            ${b.items.map(i => {
-              const topp = i.category !== kat ? `<h3 style="margin:14px 0 4px">${esc(i.category)}</h3>` : "";
-              kat = i.category;
-              return topp + `<div class="komande" style="cursor:default">
-                <div style="flex:1; min-width:0"><b>${esc(i.name)}</b><div class="smaa">maks ${i.max_qty} ${esc(i.unit)}${i.count_qty !== null ? " · sist " + i.count_qty : ""}</div></div>
-                <input type="number" inputmode="numeric" min="0" class="bar-tal" data-id="${i.id}" placeholder="${i.count_qty ?? ""}"
-                  style="width:80px; margin:0; text-align:center">
-                ${b.can_edit ? `<button class="sekundar liten" onclick="barRediger(${i.id})">✏️</button>` : ""}
-              </div>`;
-            }).join("")}
-            <button style="margin-top:12px" onclick="barLagreTeljing()">💾 Lagre teljing</button>
-          </div>` : ""}
-
-          ${b.can_edit ? `<div class="kort" id="bar-skjema">
-            <h2 style="margin-top:0">${barRedigerer ? "Endre vare" : "＋ Ny vare"}</h2>
-            <label for="v-namn">Namn</label><input id="v-namn" maxlength="60" placeholder="t.d. Tuborg 0,33, Potetgull salt">
-            <div class="rad" style="align-items:flex-start">
-              <div style="flex:1; min-width:120px"><label for="v-kat">Kategori</label>
-                <select id="v-kat">${["Øl", "Brus", "Snacks", "Anna"].map(k => `<option>${k}</option>`).join("")}</select></div>
-              <div style="flex:1; min-width:90px"><label for="v-maks">Maks tal</label><input id="v-maks" type="number" inputmode="numeric" min="1"></div>
-              <div style="flex:1; min-width:90px"><label for="v-eining">Eining</label><input id="v-eining" maxlength="20" value="stk" placeholder="stk, kasse, pose"></div>
-            </div>
-            <div class="rad" style="margin-top:10px">
-              <button onclick="barLagreVare()">💾 Lagre vare</button>
-              ${barRedigerer ? `<button class="sekundar" onclick="barRedigerer=null; visKlubbhus()">Avbryt</button>
-                <button class="fare" onclick="barSlettVare()">Slett vare</button>` : ""}
-            </div>
-          </div>` : ""}`;
+              </div>`).join("") || '<p class="dempa" style="margin:0">Lista er tom 👍</p>'}
+          </div>` : "");
           if (barRedigerer) {
             const v = b.items.find(i => i.id === barRedigerer);
             if (v) {
@@ -1085,7 +1040,55 @@
       visKlubbhus();
     }
 
-    // ---- Bar ----
+    // ---- Lager (Bar og Kjøkken): varer med maks, teljing og «Må handlast» ----
+    function lagerHtml(omr, b) {
+      const mangel = b.items.filter(i => i.need > 0);
+      const sist = b.items.filter(i => i.counted_at).sort((x, y) => y.counted_at.localeCompare(x.counted_at))[0];
+      const fullTekst = omr === "bar" ? "Ingenting manglar – baren er full 🍻" : "Ingenting manglar på kjøkkenet 👍";
+      const hint = omr === "bar" ? "t.d. Tuborg 0,33, Potetgull salt" : "t.d. Kaffi, Pappkrus, Oppvaskmiddel";
+      let kat = "";
+      return `<div class="kort" style="border-top-color:${mangel.length ? "var(--gul)" : ""}">
+          <h2 style="margin-top:0">🛒 Må handlast (${mangel.length})</h2>
+          ${mangel.map(i => `<div class="komande" style="cursor:default">
+              <div style="flex:1; min-width:0"><b>Kjøp ${i.need} ${esc(i.unit)} ${esc(i.name)}</b>
+                <div class="smaa">har ${i.count_qty} av ${i.max_qty}</div></div>
+              <button class="liten" onclick="barHandla(${i.id}, '${esc(i.name).replace(/'/g, "")}')">✔ Handla</button>
+            </div>`).join("") || `<p class="dempa" style="margin:0">${b.items.length ? fullTekst : "Ingen varer lagt inn enno."}</p>`}
+          ${sist ? `<p class="smaa" style="margin-bottom:0">Sist talt ${datoKort(sist.counted_at)} av ${esc(sist.counted_by_name || "–")}</p>` : ""}
+        </div>
+
+        ${b.items.length ? `<div class="kort">
+          <h2 style="margin-top:0">📋 Lagerteljing</h2>
+          <p class="dempa" style="margin-top:0">Skriv kor mange som står på lageret no, og trykk «Lagre teljing». Tomme felt blir ikkje endra.</p>
+          ${b.items.map(i => {
+            const topp = i.category !== kat ? `<h3 style="margin:14px 0 4px">${esc(i.category)}</h3>` : "";
+            kat = i.category;
+            return topp + `<div class="komande" style="cursor:default">
+              <div style="flex:1; min-width:0"><b>${esc(i.name)}</b><div class="smaa">maks ${i.max_qty} ${esc(i.unit)}${i.count_qty !== null ? " · sist " + i.count_qty : ""}</div></div>
+              <input type="number" inputmode="numeric" min="0" class="bar-tal" data-id="${i.id}" placeholder="${i.count_qty ?? ""}"
+                style="width:80px; margin:0; text-align:center">
+              ${b.can_edit ? `<button class="sekundar liten" onclick="barRediger(${i.id})">✏️</button>` : ""}
+            </div>`;
+          }).join("")}
+          <button style="margin-top:12px" onclick="barLagreTeljing()">💾 Lagre teljing</button>
+        </div>` : ""}
+
+        ${b.can_edit ? `<div class="kort" id="bar-skjema">
+          <h2 style="margin-top:0">${barRedigerer ? "Endre vare" : "＋ Ny vare"}</h2>
+          <label for="v-namn">Namn</label><input id="v-namn" maxlength="60" placeholder="${hint}">
+          <div class="rad" style="align-items:flex-start">
+            <div style="flex:1; min-width:120px"><label for="v-kat">Kategori</label>
+              <select id="v-kat">${b.categories.map(k => `<option>${esc(k)}</option>`).join("")}</select></div>
+            <div style="flex:1; min-width:90px"><label for="v-maks">Maks tal</label><input id="v-maks" type="number" inputmode="numeric" min="1"></div>
+            <div style="flex:1; min-width:90px"><label for="v-eining">Eining</label><input id="v-eining" maxlength="20" value="stk" placeholder="stk, kasse, pose"></div>
+          </div>
+          <div class="rad" style="margin-top:10px">
+            <button onclick="barLagreVare()">💾 Lagre vare</button>
+            ${barRedigerer ? `<button class="sekundar" onclick="barRedigerer=null; visKlubbhus()">Avbryt</button>
+              <button class="fare" onclick="barSlettVare()">Slett vare</button>` : ""}
+          </div>
+        </div>` : ""}`;
+    }
     let barRedigerer = null;
     function barRediger(id) { barRedigerer = id; visKlubbhus(); }
     async function barLagreTeljing() {
@@ -1105,7 +1108,7 @@
       try {
         await rpc("bar_item_save", { p_id: barRedigerer, p_name: document.getElementById("v-namn").value,
           p_category: document.getElementById("v-kat").value, p_max: +document.getElementById("v-maks").value || null,
-          p_unit: document.getElementById("v-eining").value });
+          p_unit: document.getElementById("v-eining").value, p_area: khDel });
       } catch (e) {
         return alert({ bad_text: "Skriv namnet på vara.", bad_max: "Skriv maks tal (minst 1)." }[e.message] || e.message);
       }
