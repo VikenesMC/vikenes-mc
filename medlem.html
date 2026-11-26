@@ -960,8 +960,8 @@
             <input id="g-mc" maxlength="100" placeholder="t.d. Harley-Davidson Road King">
             <div class="rad" style="align-items:flex-start">
               <div style="flex:1; min-width:120px"><label for="g-reg">Reg.nr.</label><input id="g-reg" maxlength="10"></div>
-              <div style="flex:1; min-width:160px"><label for="g-eigar">Kven eig han?</label>
-                <select id="g-eigar"><option>Eigen</option><option>Ektefelle/sambuar</option><option>Barn</option></select></div>
+              <div style="flex:1; min-width:160px"><label for="g-eigar">Kven eig han? (namn)</label>
+                <input id="g-eigar" maxlength="100" value="${esc(meg.name)}" placeholder="Namn på eigaren"></div>
             </div>
             <label style="display:flex; gap:8px; align-items:center; margin-top:8px; cursor:pointer">
               <input type="checkbox" id="g-fors" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
@@ -978,7 +978,7 @@
             ${s.can_pay ? `<p class="smaa" style="margin-top:0">Til saman ${kr(s.total)} · betalt ${kr(s.paid_total)} · utestår ${kr(s.total - s.paid_total)}</p>` : ""}
             ${s.bikes.map(b => `<div class="komande" style="cursor:default; flex-wrap:wrap">
                 <div style="flex:1; min-width:180px"><b>${esc(b.bike)}</b>${b.reg_nr ? " · " + esc(b.reg_nr) : ""}
-                  <div class="smaa">${esc(b.member_name || "–")}${b.guest ? " · utanfor klubben" : b.owner_note && b.owner_note !== "Eigen" ? " · " + esc(b.owner_note) : ""} · ✅ forsikra</div>
+                  <div class="smaa">${esc(b.member_name || "–")}${b.guest ? " · utanfor klubben" : b.owner_note && b.owner_note !== "Eigen" && b.owner_note !== b.member_name ? " · eigar: " + esc(b.owner_note) : ""} · ✅ forsikra</div>
                   <div class="smaa">${b.price ? `${kr(b.price)} · ${b.paid ? `<span style="color:var(--gronn)">✅ Betalt${b.paid_by_name ? " (merkt av " + esc(b.paid_by_name) + ")" : ""}</span>` : `<span style="color:var(--raud)">⏳ Ikkje betalt</span>`}` : "Gratis"}</div></div>
                 <div class="rad" style="gap:6px">
                   ${s.can_pay && b.price ? `<button class="${b.paid ? "sekundar" : ""} liten" onclick="settBetalt(${b.id}, ${!b.paid})">${b.paid ? "Angre betalt" : "✔ Merk betalt"}</button>` : ""}
