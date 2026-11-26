@@ -77,14 +77,14 @@
     }
     .front > * { position: relative; }
     .front h1 { margin: 0; line-height: 1; }
-    .front h1 img { width: min(94%, 860px); height: auto; filter: drop-shadow(0 3px 8px rgba(0,0,0,.95)); }
+    .front h1 img { width: min(98%, 1250px); height: auto; filter: drop-shadow(0 3px 8px rgba(0,0,0,.95)); }
     .front .botn { align-self: end; }
     .front .under { margin: 10px 0 0; font-size: clamp(16px, 1.8vw, 22px); color: #eee; text-shadow: 0 1px 6px #000, 0 0 2px #000; }
     .front .knappar { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
     .front .knappar .knapp { box-shadow: 0 3px 12px rgba(0,0,0,.6); }
     @media (max-width: 760px) {
       /* Mobil: høgare enn biletformatet så namn og knappar får plass (sidene blir litt skorne) */
-      .front { aspect-ratio: auto; min-height: 400px; padding: 22px 12px 22px; }
+      .front { aspect-ratio: auto; min-height: 320px; padding: 22px 8px 22px; }
       .front .knappar { gap: 8px; }
       .front .knappar .knapp { padding: 11px 14px; font-size: 15px; }
     }
@@ -228,13 +228,7 @@
       <h1><img src="velkomen-tekst.png" alt="Velkomen til support-sida for Vikenes MC"></h1>
       <p class="under">Motorsykkelklubb i Volda – sidan 2011</p>
     </div>
-    <div class="botn">
-      <div class="knappar">
-        <a class="knapp" href="#torsdag">Torsdagskafé</a>
-        <a class="knapp" href="#quiz">MC Quiz</a>
-        <a class="knapp" href="#om">Om klubben</a>
-      </div>
-    </div>
+    <div></div>
   </div>
   <div class="stripe"></div>
 

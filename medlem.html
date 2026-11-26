@@ -880,41 +880,27 @@
       const fane = document.getElementById("fane");
       let a;
       try { a = await rpc("album_list"); } catch (e) { fane.innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
-      if (aktivAlbum && !a.albums.some(x => x.id === aktivAlbum)) aktivAlbum = null;
-      if (!aktivAlbum) {
-        const url = await signerteUrlar(a.albums.map(x => x.cover).filter(Boolean));
-        fane.innerHTML = `<div class="kort">
-          <h2 style="margin-top:0">📷 Album</h2>
-          <div class="album-rutenett">
-            ${a.albums.map(x => `<div class="album" onclick="aktivAlbum=${x.id}; visBilete()">
-                ${x.cover && url[x.cover] ? `<img src="${url[x.cover]}" alt="">` : `<div class="tomt">📷</div>`}
-                <b>${esc(x.name)}</b><span class="smaa">${x.count} bilete${x.shared ? ` · ${x.shared} på framsida` : ""}</span>
-              </div>`).join("") || '<p class="dempa">Ingen album enno.</p>'}
-          </div>
-          <div class="skrivfelt" style="margin-top:14px">
-            <input id="a-namn" maxlength="60" placeholder="Namn på nytt album" style="flex:1; margin:0">
-            <button onclick="nyttAlbum()">＋ Nytt album</button>
-          </div>
-        </div>`;
-        return;
+      // Kay 2026-11-26: berre éi bilet-mappe – alle bilete i same
+      if (!a.albums.length) {
+        try { await rpc("album_create", { p_name: "Bilete" }); a = await rpc("album_list"); }
+        catch (e) { fane.innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
       }
-      const alb = a.albums.find(x => x.id === aktivAlbum);
+      aktivAlbum = a.albums[0].id;
       try { bileteListe = await rpc("photo_list", { p_album: aktivAlbum }); } catch (e) { fane.innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
       const url = await signerteUrlar(bileteListe.map(p => p.path));
       fane.innerHTML = `<div class="kort">
         <div class="rad" style="justify-content:space-between">
-          <button class="sekundar liten" onclick="aktivAlbum=null; visBilete()">◀ Alle album</button>
+          <h2 style="margin:0">📷 Bilete (${bileteListe.length})</h2>
           <label class="knapp-fil">📤 Last opp bilete
             <input type="file" accept="image/*" multiple style="display:none" onchange="lastOppBilete(this.files)"></label>
         </div>
-        <h2>${esc(alb.name)} (${bileteListe.length})</h2>
-        ${a.can_share ? '<p class="dempa" style="margin-top:0">Huk av «Framsida» på bilete som skal visast på den opne sida.</p>' : ""}
+        ${a.can_share ? '<p class="dempa">Huk av «Supportsida» på bilete som skal visast på supportsida.</p>' : ""}
         <p id="b-status" class="dempa"></p>
         <div class="bilete-rutenett">
           ${bileteListe.map((p, i) => `<div class="bilete${p.shared ? " delt" : ""}">
               <img src="${url[p.path] || ""}" alt="${esc(p.caption || "")}" loading="lazy" onclick="visStortBilete(${i})">
               <div class="bilete-meny">
-                ${a.can_share ? `<label><input type="checkbox" ${p.shared ? "checked" : ""} onchange="delBilete(${p.id}, this)"> Framsida</label>` : (p.shared ? "<span>🌐 Framsida</span>" : "<span></span>")}
+                ${a.can_share ? `<label><input type="checkbox" ${p.shared ? "checked" : ""} onchange="delBilete(${p.id}, this)"> Supportsida</label>` : (p.shared ? "<span>🌐 Supportsida</span>" : "<span></span>")}
                 ${p.can_delete ? `<button class="fare liten" onclick="slettBilete(${p.id})">🗑️</button>` : ""}
               </div>
             </div>`).join("") || '<p class="dempa">Ingen bilete i dette albumet enno.</p>'}
