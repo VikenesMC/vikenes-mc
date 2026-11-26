@@ -9,7 +9,10 @@
 --  * Ei sak går anten «Til styret – hastar» (styret får pushvarsel) eller
 --    «Til årsmøtet». Styret kan merkje hastesaker som behandla.
 --  * Alle medlemmer ser sakene. Styret kan fjerne useriøse saker.
---  * Styret lagar avstemmingar med krav (fleirtal, 2/3 …) og stengjer dei.
+--  * Alle medlemmer kan leggje inn forslag/avstemmingar med krav i prosent
+--    (standard 70 %). Den som foreslo, eller styret, stengjer. Når alle med
+--    røysterett har røysta, blir ho stengd av seg sjølv.
+--  * Logg: vedtekne forslag kan merkjast «gjennomført».
 --  * Prospect og Hangaround har ikkje røysterett (kan melde inn saker).
 --  * Kvart medlem røystar ja/nei éin gong. Røysta er anonym: me lagrar
 --    berre AT du har røysta (agm_voted), og tel ja/nei i to tal på
@@ -122,7 +125,8 @@ create or replace function public.agm_vote_create(p_question text, p_info text, 
 returns bigint language plpgsql volatile security definer set search_path = public as $$
 declare v_id bigint;
 begin
-  if not public._is_styre(auth.uid()) then raise exception 'not_allowed'; end if;
+  -- Kay 2026-11-26: alle godkjende medlemmer kan leggje inn forslag
+  if not public.is_member() then raise exception 'not_member'; end if;
   p_question := trim(coalesce(p_question, ''));
   if length(p_question) < 3 or length(p_question) > 300 then raise exception 'bad_text'; end if;
   if p_krav_pct is null or p_krav_pct <= 0 or p_krav_pct > 100 then raise exception 'bad_krav'; end if;
@@ -148,14 +152,21 @@ begin
   else
     update public.agm_votes set no_count = no_count + 1 where id = p_id;
   end if;
+  -- Alle med røysterett har røysta → stengt av seg sjølv
+  if (select count(*) from public.agm_voted where vote_id = p_id) >=
+     (select count(*) from public.members where status = 'approved' and role not in ('Prospect', 'Hangaround')) then
+    update public.agm_votes set status = 'closed', closed_at = now() where id = p_id and status = 'open';
+  end if;
 end $$;
 grant execute on function public.agm_vote_cast(bigint, boolean) to authenticated;
 
 create or replace function public.agm_vote_close(p_id bigint)
 returns void language plpgsql volatile security definer set search_path = public as $$
 begin
-  if not public._is_styre(auth.uid()) then raise exception 'not_allowed'; end if;
-  update public.agm_votes set status = 'closed', closed_at = now() where id = p_id and status = 'open';
+  -- Den som la inn forslaget, eller styret
+  update public.agm_votes set status = 'closed', closed_at = now()
+   where id = p_id and status = 'open' and (created_by = auth.uid() or public._is_styre(auth.uid()));
+  if not found then raise exception 'not_allowed'; end if;
 end $$;
 grant execute on function public.agm_vote_close(bigint) to authenticated;
 
@@ -170,6 +181,8 @@ begin
   return coalesce((select json_agg(json_build_object(
       'id', v.id, 'question', v.question, 'info', v.info, 'krav_pct', v.krav_pct, 'strict', v.strict,
       'status', v.status, 'created_name', v.created_name, 'created_at', v.created_at, 'closed_at', v.closed_at,
+      'done_at', v.done_at, 'done_by_name', v.done_by_name,
+      'can_close', v.created_by = auth.uid() or public._is_styre(auth.uid()),
       'voted', (select count(*) from public.agm_voted d where d.vote_id = v.id),
       'members', v_medl,
       'can_vote', v_kan,
@@ -185,3 +198,18 @@ begin
     from public.agm_votes v), '[]'::json);
 end $$;
 grant execute on function public.agm_vote_list() to authenticated;
+
+-- ---------- Logg: merk vedtekne forslag som gjennomførte (Kay 2026-11-26) ----------
+alter table public.agm_votes add column if not exists done_at      timestamptz;
+alter table public.agm_votes add column if not exists done_by_name text;
+
+create or replace function public.agm_vote_done(p_id bigint, p_done boolean)
+returns void language plpgsql volatile security definer set search_path = public as $$
+begin
+  update public.agm_votes
+     set done_at = case when coalesce(p_done, true) then now() end,
+         done_by_name = case when coalesce(p_done, true) then (select name from public.members where id = auth.uid()) end
+   where id = p_id and status = 'closed' and (created_by = auth.uid() or public._is_styre(auth.uid()));
+  if not found then raise exception 'not_allowed'; end if;
+end $$;
+grant execute on function public.agm_vote_done(bigint, boolean) to authenticated;
