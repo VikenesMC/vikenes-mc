@@ -337,7 +337,7 @@
           <button data-fane="arkiv" onclick="visFane('arkiv')">Arkiv</button>
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
           <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
-          <button data-fane="arsmote" onclick="visFane('arsmote')">Årsmøte</button>
+          <button data-fane="arsmote" onclick="visFane('arsmote')">Saker</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.role === "President" ? `<button data-fane="president" onclick="visFane('president')">President</button>` : ""}
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
@@ -767,31 +767,50 @@
         </div>
 
         <div class="kort">
-          <h2 style="margin-top:0">Meld inn sak til årsmøtet</h2>
+          <h2 style="margin-top:0">Meld inn sak</h2>
           <textarea id="s-tekst" rows="3" maxlength="3000" placeholder="Skriv saka di …"></textarea>
           <label style="display:flex; gap:8px; align-items:center; margin-top:8px; cursor:pointer">
             <input type="checkbox" id="s-anonym" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
             Send anonymt (namnet ditt blir ikkje lagra)</label>
-          <button style="margin-top:10px" onclick="sendSak()">📨 Send inn</button>
+          <div class="rad" style="margin-top:10px">
+            <button onclick="sendSak('styret')">⚡ Til styret – hastar</button>
+            <button class="sekundar" onclick="sendSak('arsmote')">📅 Til årsmøtet</button>
+          </div>
+          <p class="dempa" style="font-size:13px; margin-bottom:0">Hastar det, får styret varsel med ein gong. Elles blir saka teken opp på årsmøtet.</p>
         </div>
 
-        <div class="kort">
-          <h2 style="margin-top:0">Innmelde saker (${saker.length})</h2>
-          ${saker.map(s => `<div class="treff">
-            <p style="white-space:pre-line; margin:0">${esc(s.body)}</p>
-            <div class="smaa" style="margin-top:6px">${s.anonymous ? "🕶️ Anonym" : "Frå " + esc(s.author_name || "–")} · ${datoKort(s.created_at)}</div>
-            ${meg.styre ? `<button class="fare liten" style="margin-top:8px" onclick="fjernSak(${s.id})">Fjern</button>` : ""}
-          </div>`).join("") || '<p class="dempa" style="margin:0">Ingen saker enno.</p>'}
-        </div>`;
+        ${sakListe(saker.filter(s => s.target === "styret"), "⚡ Til styret", true)}
+        ${sakListe(saker.filter(s => s.target !== "styret"), "📅 Til årsmøtet", false)}`;
     }
 
-    async function sendSak() {
+    function sakListe(liste, tittel, hast) {
+      return `<div class="kort">
+        <h2 style="margin-top:0">${tittel} (${liste.length})</h2>
+        ${liste.map(s => `<div class="treff" style="${s.handled ? "opacity:.55" : ""}">
+          <p style="white-space:pre-line; margin:0">${esc(s.body)}</p>
+          <div class="smaa" style="margin-top:6px">${s.anonymous ? "🕶️ Anonym" : "Frå " + esc(s.author_name || "–")} · ${datoKort(s.created_at)}${s.handled ? " · ✔ Behandla" : ""}</div>
+          ${meg.styre ? `<div class="rad" style="margin-top:8px">
+            ${hast ? `<button class="sekundar liten" onclick="sakBehandla(${s.id}, ${!s.handled})">${s.handled ? "Opne att" : "✔ Merk som behandla"}</button>` : ""}
+            <button class="fare liten" onclick="fjernSak(${s.id})">Fjern</button></div>` : ""}
+        </div>`).join("") || '<p class="dempa" style="margin:0">Ingen saker.</p>'}
+      </div>`;
+    }
+
+    async function sendSak(mal) {
       const tekst = document.getElementById("s-tekst").value.trim();
       const anonym = document.getElementById("s-anonym").checked;
       if (tekst.length < 3) return alert("Skriv saka først.");
-      if (!confirm(anonym ? "Sende saka anonymt? Ingen kan sjå kven som sende ho." : "Sende saka med namnet ditt?")) return;
-      try { await rpc("agm_case_submit", { p_body: tekst, p_anonymous: anonym }); }
+      const kvar = mal === "styret" ? "til styret (hastar – styret får varsel)" : "til årsmøtet";
+      if (!confirm(`Sende saka ${kvar}${anonym ? " anonymt? Ingen kan sjå kven som sende ho." : " med namnet ditt?"}`)) return;
+      let id;
+      try { id = await rpc("agm_case_submit", { p_body: tekst, p_anonymous: anonym, p_target: mal }); }
       catch (e) { return alert(e.message); }
+      if (mal === "styret") db.functions.invoke("chat-push", { body: { action: "sak", case_id: id } }).catch(() => {});
+      visArsmote();
+    }
+
+    async function sakBehandla(id, ja) {
+      try { await rpc("agm_case_handled", { p_id: id, p_handled: ja }); } catch (e) { alert(e.message); }
       visArsmote();
     }
 
