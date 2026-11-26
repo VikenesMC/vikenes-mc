@@ -106,6 +106,7 @@
     .mld.min { margin-left: auto; }
     .mld.min .boble { background: var(--oransje); color: #000; border-radius: 14px 14px 4px 14px; }
     .mld.min .meta { text-align: right; }
+    .mld.min .kven { text-align: right; margin: 0 4px 2px 0; }
     .skrivfelt { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
     .skrivfelt textarea { flex: 1; margin: 0; resize: none; min-height: 48px; max-height: 140px; }
     .skrivfelt button { margin: 0; height: 48px; }
@@ -446,7 +447,7 @@
       let skil = "";
       if (!chat.dagar.has(dag)) { chat.dagar.add(dag); skil = `<div class="dag">${esc(dagTekst(m.created_at))}</div>`; }
       return `${skil}<div class="mld ${min ? "min" : ""}" data-id="${m.id}">
-          ${min ? "" : `<div class="kven">${esc(m.author)}</div>`}
+          <div class="kven">${esc(m.author)}</div>
           <div class="boble">${esc(m.body)}${m.event ? treffkortHtml(m.event) : ""}</div>
           <div class="meta">${esc(klokke(m.created_at))} ·
             <button onclick="visSettAv(${m.id})">Sett av <span class="sett">${m.seen}</span> av ${chat.total}</button></div>
