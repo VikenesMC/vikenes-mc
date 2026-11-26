@@ -754,7 +754,8 @@
             ${v.info ? `<p style="white-space:pre-line; margin:6px 0">${esc(v.info)}</p>` : ""}
             <div class="smaa">Krav: ${esc(kravTekst(v))} · ${v.voted} av ${v.members} har røysta</div>
             ${v.status === "open" ? `
-              ${v.i_voted ? `<p style="margin:10px 0 0">✅ Du har røysta.</p>` : `<div class="jane">
+              ${v.i_voted ? `<p style="margin:10px 0 0">✅ Du har røysta.</p>`
+                : !v.can_vote ? `<p class="dempa" style="margin:10px 0 0">Prospect og Hangaround har ikkje røysterett.</p>` : `<div class="jane">
                 <button onclick="roeyst(${v.id}, true)">👍 Ja</button>
                 <button onclick="roeyst(${v.id}, false)">👎 Nei</button></div>`}
               ${meg.styre ? `<button class="sekundar liten" style="margin-top:10px" onclick="stengAvstemming(${v.id})">🔒 Steng og vis resultat</button>` : ""}`
@@ -813,7 +814,8 @@
     async function roeyst(id, ja) {
       if (!confirm(`Røyste ${ja ? "JA" : "NEI"}? Du kan ikkje endre røysta etterpå.`)) return;
       try { await rpc("agm_vote_cast", { p_id: id, p_yes: ja }); }
-      catch (e) { alert({ already_voted: "Du har alt røysta.", closed: "Avstemminga er stengd." }[e.message] || e.message); }
+      catch (e) { alert({ already_voted: "Du har alt røysta.", closed: "Avstemminga er stengd.",
+                          no_vote_right: "Prospect og Hangaround har ikkje røysterett." }[e.message] || e.message); }
       visArsmote();
     }
 
