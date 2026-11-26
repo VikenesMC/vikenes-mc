@@ -113,6 +113,9 @@
     .komande:first-of-type { border-top: 0; }
     .komande .kdato { width: 52px; flex: none; text-align: center; font-weight: bold; color: var(--oransje); font-size: 18px; line-height: 1.1; }
     .komande .kdato span { display: block; font-size: 11px; font-weight: normal; color: var(--dempa); }
+    details.reglar { background: #1b1b1b; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; margin: 6px 0 10px; }
+    details.reglar summary { cursor: pointer; color: var(--oransje); font-weight: bold; }
+    details.reglar p { font-size: 14px; line-height: 1.5; margin: 8px 0 0; }
     .datorad { display: flex; gap: 6px; align-items: stretch; margin: 6px 0 12px; }
     .kalknapp { position: relative; display: flex; align-items: center; justify-content: center; width: 52px; flex: none;
                 margin: 0; padding: 0; font-size: 24px; background: #222; border: 1px solid #444; border-radius: 8px; cursor: pointer; overflow: hidden; }
@@ -338,6 +341,7 @@
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
           <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
           <button data-fane="arsmote" onclick="visFane('arsmote')">Saker</button>
+          <button data-fane="klubbhus" onclick="visFane('klubbhus')">Klubbhuset</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.role === "President" ? `<button data-fane="president" onclick="visFane('president')">President</button>` : ""}
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
@@ -364,6 +368,7 @@
       if (f === "gjestebok") return visGjestebok();
       if (f === "president") return visPresident();
       if (f === "arsmote") return visArsmote();
+      if (f === "klubbhus") return visKlubbhus();
       try { liste = await rpc("member_list"); }
       catch (e) { return start(); }
       visMedlemmer();
@@ -842,6 +847,209 @@
       if (!confirm("Stengje avstemminga og vise resultatet til alle? Ingen kan røyste etterpå.")) return;
       try { await rpc("agm_vote_close", { p_id: id }); } catch (e) { alert(e.message); }
       visArsmote();
+    }
+
+    // ---------------- Klubbhuset: husreglar + skjema ----------------
+    // Husreglar for Vikenes MC 2026–2027 (frå dokumentet Kay delte, ordrett)
+    const HUSREGLAR = [
+      ["1. Orden, ansvar og bruk av lokalet", [
+        "1.1 Alle medlemmer har ansvar for å holde klubbens lokaler rene, ryddige og i forsvarlig stand.",
+        "1.2 Verktøy, utstyr og inventar skal settes på plass etter bruk, og søppel skal kastes.",
+        "1.3 Ved hjemlån av verktøy eller utstyr skal dette føres i låneboken.",
+        "1.4 Lys, kaffetrakter og elektrisk utstyr skal slås av, og dører låses ved forlatelse av lokalet.",
+        "1.5 Motorsykler skal ikke startes inne i lokalet etter kl. 22.00.",
+        "1.6 Olje, bensin og annet søl skal tørkes opp umiddelbart."]],
+      ["2. Ro, støy og hensyn til naboer", [
+        "2.1 Unødig tomgangskjøring utenfor lokalet etter kl. 23.00 er ikke tillatt.",
+        "2.2 Det skal være ro i lokalet etter kl. 24.00 på hverdager, med mindre annet er avtalt med styret.",
+        "2.3 Medlemmer plikter å vise hensyn til naboer og nærmiljø."]],
+      ["3. Arrangement og bruk av lokalet", [
+        "3.1 Alle medlemmer står fritt til å opprette arrangement som gagner klubben og medlemmene.",
+        "3.2 Private arrangement skal godkjennes av styret.",
+        "3.3 Ved arrangement skal lokalet ryddes og forlates senest kl. 04.00, så langt det lar seg gjøre. Grundigere rydding og vask utføres i regi av arrangør, helst innen ett døgn etter arrangementet.",
+        "3.4 Ved behov skal naboer varsles i forkant.",
+        "3.5 Medlemmer er ansvarlige for sine gjester under arrangement."]],
+      ["4. Rusmidler", [
+        "4.1 Bruk av narkotiske rusmidler er ikke tillatt i klubbens lokaler eller på arrangement i regi av Vikenes MC.",
+        "4.2 Misbruk av alkohol som fører til uakseptabel oppførsel tolereres ikke."]],
+      ["5. Lagring", [
+        "5.1 Medlemmer med gyldig medlemskap kan lagre egen motorsykkel i klubbens lokaler samt én (1) ekstra motorsykkel som enten eies av medlemmet selv eller tilhører nærmeste familie (ektefelle, samboer eller barn).",
+        "5.2 Alle motorsykler som lagres i lokalet skal ha minst gyldig lagringsforsikring, inkludert brannforsikring.",
+        "5.3 Utleie av lagringsplass til andre enn medlemmer skal godkjennes av styret.",
+        "5.4 Pris for vinterlagring er kr 1500 per vintersesong, med mindre annet vedtas av styret."]],
+      ["6. Bryggeutstyr og bryggeansvar", [
+        "6.1 Bryggeutstyr forvaltes av klubbens bryggeansvarlig.",
+        "6.2 Bruk av bryggeutstyr skal skje etter avtale med bryggeansvarlig.",
+        "6.3 Utstyret skal rengjøres og settes på plass etter bruk.",
+        "6.4 Skader eller feil bruk skal meldes til bryggeansvarlig eller styret, da klubben er avhengig av at utstyret fungerer optimalt."]],
+      ["7. Verksted og bruk av arbeidsplass", [
+        "7.1 Verkstedet er til felles bruk for klubbens medlemmer og skal behandles med respekt.",
+        "7.2 Arbeid på motorsykler og annet utstyr skal utføres på anvist plass. Arbeidsplassen skal ryddes og rengjøres etter bruk.",
+        "7.3 Verktøy og maskiner skal kun brukes av medlemmer som har tilstrekkelig kunnskap til sikker bruk. Ved tvil skal ansvarlig medlem kontaktes.",
+        "7.4 Defekt, slitt eller ødelagt utstyr skal meldes til styret eller verkstedsansvarlig umiddelbart.",
+        "6.5 Sveising, sliping og annet arbeid som medfører gnister eller brannfare skal kun utføres på anvist område og med nødvendig brannsikring. Slike arbeider skal kun utføres når minst ett (1) ekstra medlem er til stede som observatør, og gjeldende retningslinjer for varme arbeider skal følges.",
+        "7.6 Bruk av løfteutstyr, kompressor og større maskiner skjer på eget ansvar og etter gjeldende sikkerhetsrutiner.",
+        "7.7 Private prosjekter som opptar verkstedplassen over lengre tid enn seks (6) måneder skal godkjennes av styret. Dersom arbeid på en motorsykkel står stille i mer enn to (2) måneder, skal løftebukk så langt det er mulig frigis mellom arbeidsøktene.",
+        "7.8 Ved utlån av verkstedet til personer som ikke er medlemmer, skal dette godkjennes av styret. Ansvarlig medlem skal alltid være til stede. Låntaker skal ikke oppholde seg alene i klubbens lokaler. Nøkler til klubbens lokaler skal aldri lånes ut til utenforstående."]],
+      ["8. Brudd på husreglene", [
+        "8.1 Brudd på husreglene kan medføre advarsel, bortvisning, suspensjon eller eksklusjon.",
+        "8.2 Styret vurderer reaksjon ut fra alvorlighetsgrad og gjentakelse."]],
+      ["9. Ikrafttredelse", [
+        "9.1 Disse husreglene gjelder fra vedtaksdato og skal være tilgjengelige for alle medlemmer."]],
+    ];
+    const KH_DELAR = [
+      ["kjokken", "☕ Kjøkken"], ["verkstad", "🔧 Verkstad"], ["lagring", "🏍️ Lagring"],
+      ["brygging", "🍺 Brygging"], ["reglar", "📜 Husreglar"],
+    ];
+    let khDel = "kjokken";
+
+    // Reglar for ein del: heile kapittel (nr) og/eller enkeltpunkt (t.d. "1.3")
+    function reglarHtml(kapittel, ekstra = []) {
+      const linjer = [];
+      HUSREGLAR.forEach(([tittel, punkt], i) => {
+        if (kapittel.includes(i + 1)) linjer.push(`<b>${esc(tittel)}</b>`, ...punkt.map(esc));
+        else punkt.filter(p => ekstra.some(e => p.startsWith(e + " "))).forEach(p => linjer.push(esc(p)));
+      });
+      return `<details class="reglar"><summary>📜 Husreglar for dette</summary><p>${linjer.join("<br>")}</p></details>`;
+    }
+
+    async function visKlubbhus() {
+      const meny = `<div class="rad" style="margin-bottom:12px">${KH_DELAR.map(([k, n]) =>
+        `<button class="${k === khDel ? "" : "sekundar"} liten" onclick="khDel='${k}'; visKlubbhus()">${n}</button>`).join("")}</div>`;
+      const fane = document.getElementById("fane");
+      try {
+        if (khDel === "kjokken") {
+          const l = await rpc("shop_list");
+          fane.innerHTML = meny + `<div class="kort">
+            <h2 style="margin-top:0">🛒 Handleliste</h2>
+            <p class="dempa" style="margin-top:0">Skriv opp det som manglar. Har du handla, trykk ✔ – då forsvinn det frå lista.</p>
+            <div class="skrivfelt" style="margin-bottom:10px">
+              <input id="h-vare" maxlength="120" placeholder="t.d. kaffi, pappkrus, is" style="flex:1; margin:0"
+                onkeydown="if (event.key === 'Enter') leggTilVare()">
+              <button onclick="leggTilVare()">＋ Legg til</button>
+            </div>
+            ${l.map(v => `<div class="komande" style="cursor:default">
+                <div style="flex:1; min-width:0"><b>${esc(v.item)}</b>
+                  <div class="smaa">${esc(v.added_name || "–")} · ${datoKort(v.created_at)}</div></div>
+                <button class="liten" onclick="handla(${v.id})">✔ Handla</button>
+              </div>`).join("") || '<p class="dempa" style="margin:0">Lista er tom – alt er handla 👍</p>'}
+          </div>`;
+        } else if (khDel === "verkstad") {
+          const l = await rpc("loan_list");
+          fane.innerHTML = meny + `<div class="kort">
+            <h2 style="margin-top:0">📒 Lånebok</h2>
+            ${reglarHtml([], ["1.2", "1.3"])}
+            <p class="dempa">Tek du med deg verktøy eller utstyr heim, skriv det her. Trykk «Levert» når det er tilbake.</p>
+            <div class="skrivfelt" style="margin-bottom:10px">
+              <input id="l-ting" maxlength="150" placeholder="t.d. momentnøkkel, batterilader" style="flex:1; margin:0">
+              <button onclick="laan()">Eg lånar</button>
+            </div>
+            ${l.map(x => `<div class="komande" style="cursor:default">
+                <div style="flex:1; min-width:0"><b>${esc(x.item)}</b>
+                  <div class="smaa">${esc(x.member_name || "–")} · lånt ${datoKort(x.lent_at)}</div></div>
+                ${x.mine || meg.styre ? `<button class="sekundar liten" onclick="levert(${x.id})">✔ Levert</button>` : ""}
+              </div>`).join("") || '<p class="dempa" style="margin:0">Ingenting er utlånt no.</p>'}
+          </div>
+          ${feilmeldingHtml("verkstad", "⚠️ Meld feil eller skade på utstyr", "t.d. kompressoren lek luft, løftebukken heng", [7])}`;
+        } else if (khDel === "lagring") {
+          const s = await rpc("storage_list");
+          fane.innerHTML = meny + `<div class="kort">
+            <h2 style="margin-top:0">🏍️ Vinterlagring ${esc(s.season)}</h2>
+            ${reglarHtml([5])}
+            <label for="g-mc">Motorsykkel (merke og modell)</label>
+            <input id="g-mc" maxlength="100" placeholder="t.d. Harley-Davidson Road King">
+            <div class="rad" style="align-items:flex-start">
+              <div style="flex:1; min-width:120px"><label for="g-reg">Reg.nr.</label><input id="g-reg" maxlength="10"></div>
+              <div style="flex:1; min-width:160px"><label for="g-eigar">Kven eig han?</label>
+                <select id="g-eigar"><option>Eigen</option><option>Ektefelle/sambuar</option><option>Barn</option></select></div>
+            </div>
+            <label style="display:flex; gap:8px; align-items:center; margin-top:8px; cursor:pointer">
+              <input type="checkbox" id="g-fors" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
+              Sykkelen har gyldig lagringsforsikring med brannforsikring (5.2)</label>
+            <button style="margin-top:10px" onclick="meldLagring()">Meld inn til lagring</button>
+            <p class="dempa" style="font-size:13px">Pris: kr 1500 per vintersesong (5.4). Maks to syklar per medlem (5.1).</p>
+            <h3>Lagra denne sesongen (${s.bikes.length})</h3>
+            ${s.bikes.map(b => `<div class="komande" style="cursor:default">
+                <div style="flex:1; min-width:0"><b>${esc(b.bike)}</b>${b.reg_nr ? " · " + esc(b.reg_nr) : ""}
+                  <div class="smaa">${esc(b.member_name || "–")}${b.owner_note && b.owner_note !== "Eigen" ? " · " + esc(b.owner_note) : ""} · ✅ forsikra</div></div>
+                ${b.mine || meg.styre ? `<button class="fare liten" onclick="fjernLagring(${b.id})">Fjern</button>` : ""}
+              </div>`).join("") || '<p class="dempa" style="margin:0">Ingen syklar meldt inn enno.</p>'}
+          </div>`;
+        } else if (khDel === "brygging") {
+          fane.innerHTML = meny + `<div class="kort">
+            <h2 style="margin-top:0">🍺 Brygging</h2>
+            ${reglarHtml([6])}
+            <p class="dempa" style="margin-bottom:0">Bruk av bryggeutstyret skjer etter avtale med bryggeansvarleg (6.2).</p>
+          </div>
+          ${feilmeldingHtml("brygging", "⚠️ Meld skade eller feil på bryggeutstyr", "t.d. termometeret viser feil", [])}`;
+        } else {
+          fane.innerHTML = meny + `<div class="kort">
+            <h2 style="margin-top:0">📜 Husreglar for Vikenes MC</h2>
+            ${HUSREGLAR.map(([t, p]) => `<h3>${esc(t)}</h3><p>${p.map(esc).join("<br>")}</p>`).join("")}
+          </div>`;
+        }
+      } catch (e) { fane.innerHTML = meny + `<p class="feil">${esc(e.message)}</p>`; }
+    }
+
+    // Feilmelding blir ei hastesak til styret (sjå fana «Saker»), med pushvarsel
+    function feilmeldingHtml(kvar, tittel, hint, kapittel) {
+      return `<div class="kort">
+        <h2 style="margin-top:0">${tittel}</h2>
+        ${kapittel.length ? reglarHtml(kapittel) : ""}
+        <textarea id="f-${kvar}" rows="3" maxlength="2000" placeholder="${esc(hint)}"></textarea>
+        <button style="margin-top:8px" onclick="meldFeil('${kvar}')">Send til styret</button>
+        <p class="dempa" style="font-size:13px; margin-bottom:0">Styret får varsel med ein gong. Meldinga ligg under «Saker → Til styret».</p>
+      </div>`;
+    }
+
+    async function meldFeil(kvar) {
+      const t = document.getElementById("f-" + kvar).value.trim();
+      if (t.length < 3) return alert("Skriv kva som er feil.");
+      const tekst = (kvar === "verkstad" ? "🔧 Verkstad: " : "🍺 Bryggeutstyr: ") + t;
+      try {
+        const id = await rpc("agm_case_submit", { p_body: tekst, p_anonymous: false, p_target: "styret" });
+        db.functions.invoke("chat-push", { body: { action: "sak", case_id: id } }).catch(() => {});
+        alert("Sendt til styret. Takk!");
+      } catch (e) { return alert(e.message); }
+      visKlubbhus();
+    }
+
+    async function leggTilVare() {
+      const f = document.getElementById("h-vare");
+      if (!f.value.trim()) return;
+      try { await rpc("shop_add", { p_item: f.value }); } catch (e) { return alert(e.message); }
+      await visKlubbhus();
+      document.getElementById("h-vare")?.focus();
+    }
+    async function handla(id) {
+      try { await rpc("shop_done", { p_id: id }); } catch (e) { alert(e.message); }
+      visKlubbhus();
+    }
+    async function laan() {
+      const t = document.getElementById("l-ting").value.trim();
+      if (t.length < 2) return alert("Skriv kva du lånar.");
+      try { await rpc("loan_add", { p_item: t }); } catch (e) { return alert(e.message); }
+      visKlubbhus();
+    }
+    async function levert(id) {
+      try { await rpc("loan_return", { p_id: id }); } catch (e) { alert(e.message); }
+      visKlubbhus();
+    }
+    async function meldLagring() {
+      if (!document.getElementById("g-fors").checked) return alert("Sykkelen må ha lagringsforsikring med brannforsikring (husregel 5.2).");
+      try {
+        await rpc("storage_add", { p_bike: document.getElementById("g-mc").value, p_reg_nr: document.getElementById("g-reg").value,
+          p_owner_note: document.getElementById("g-eigar").value, p_insured: true });
+      } catch (e) {
+        return alert({ max_two: "Du kan lagre maks to syklar (husregel 5.1).", bad_text: "Skriv merke og modell.",
+                       not_insured: "Sykkelen må ha lagringsforsikring." }[e.message] || e.message);
+      }
+      visKlubbhus();
+    }
+    async function fjernLagring(id) {
+      if (!confirm("Fjerne sykkelen frå lagringslista?")) return;
+      try { await rpc("storage_remove", { p_id: id }); } catch (e) { alert(e.message); }
+      visKlubbhus();
     }
 
     // ---------------- Styregodkjenning ----------------
