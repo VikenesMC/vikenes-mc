@@ -195,21 +195,27 @@ begin
 end $$;
 grant execute on function public.storage_add(text, text, text, boolean) to authenticated;
 
--- Regnskap/President legg inn sykkel for nokon utanfor klubben (1800 kr)
-create or replace function public.storage_add_guest(p_name text, p_bike text, p_reg_nr text, p_insured boolean)
+-- Kay 2026-11-26: Berre dei som betaler blir skrivne inn, og det gjer kasserar/President.
+-- p_kind: 'ute' (utanfor klubben, 1800), 'hangaround' (1000), 'prospect2' (Prospect sykkel nr. 2, 1000)
+drop function if exists public.storage_add_guest(text, text, text, boolean);
+create or replace function public.storage_add_guest(p_name text, p_bike text, p_reg_nr text, p_insured boolean, p_kind text default 'ute')
 returns bigint language plpgsql volatile security definer set search_path = public as $$
-declare v_id bigint;
+declare v_id bigint; v_pris int; v_type text;
 begin
   if not public.has_access('regnskap') then raise exception 'not_allowed'; end if;
   if not coalesce(p_insured, false) then raise exception 'not_insured'; end if;
   p_name := trim(coalesce(p_name, '')); p_bike := trim(coalesce(p_bike, ''));
   if length(p_name) < 2 or length(p_name) > 80 or length(p_bike) < 2 or length(p_bike) > 100 then raise exception 'bad_text'; end if;
+  select x.pris, x.typ into v_pris, v_type from (values
+    ('ute', 1800, 'Utanfor klubben'), ('hangaround', 1000, 'Hangaround'), ('prospect2', 1000, 'Prospect, sykkel nr. 2')
+  ) as x(kind, pris, typ) where x.kind = p_kind;
+  if v_pris is null then raise exception 'bad_kind'; end if;
   insert into public.storage_bikes (season, guest_name, bike, reg_nr, owner_note, insured, price, registered_by)
-  values (public._lagringssesong(), p_name, p_bike, nullif(upper(trim(coalesce(p_reg_nr, ''))), ''), 'Utanfor klubben', true, 1800, auth.uid())
+  values (public._lagringssesong(), p_name, p_bike, nullif(upper(trim(coalesce(p_reg_nr, ''))), ''), v_type, true, v_pris, auth.uid())
   returning id into v_id;
   return v_id;
 end $$;
-grant execute on function public.storage_add_guest(text, text, text, boolean) to authenticated;
+grant execute on function public.storage_add_guest(text, text, text, boolean, text) to authenticated;
 
 create or replace function public.storage_set_paid(p_id bigint, p_paid boolean)
 returns void language plpgsql volatile security definer set search_path = public as $$
