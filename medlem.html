@@ -735,17 +735,19 @@
     }
 
     // ---------------- Årsmøte: saker og anonym avstemming ----------------
+    // Kay 2026-11-26: krav i prosent (lettare å forstå), 70 % som standard
     const KRAV = [
-      { v: "50s", t: "Fleirtal (meir enn halvparten)", pct: 50, strict: true },
-      { v: "66.67", t: "2/3 fleirtal", pct: 66.67, strict: false },
-      { v: "75", t: "3/4 fleirtal", pct: 75, strict: false },
-      { v: "100", t: "Alle må seie ja", pct: 100, strict: false },
+      { v: "50s", t: "Over 50 %", pct: 50, strict: true },
+      { v: "60", t: "Minst 60 %", pct: 60, strict: false },
+      { v: "70", t: "Minst 70 %", pct: 70, strict: false },
+      { v: "75", t: "Minst 75 %", pct: 75, strict: false },
+      { v: "100", t: "Alle (100 %)", pct: 100, strict: false },
     ];
     let nyAvstemming = false;
 
     function kravTekst(v) {
       const k = KRAV.find(k => k.pct === +v.krav_pct && k.strict === v.strict);
-      return k ? k.t : (v.strict ? "Meir enn " : "Minst ") + String(v.krav_pct).replace(".", ",") + " % ja";
+      return (k ? k.t : (v.strict ? "Over " : "Minst ") + String(Math.round(v.krav_pct)) + " %") + " ja";
     }
 
     async function visArsmote() {
@@ -753,38 +755,50 @@
       try { [saker, avst] = await Promise.all([rpc("agm_case_list"), rpc("agm_vote_list")]); }
       catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
       const pst = (n, tot) => String(tot ? Math.round(n * 1000 / tot) / 10 : 0).replace(".", ",");
+      const opne = avst.filter(v => v.status === "open");
+      const logg = avst.filter(v => v.status !== "open").sort((a, b) => (b.closed_at || "").localeCompare(a.closed_at || ""));
       document.getElementById("fane").innerHTML = `
         <div class="kort">
-          <h2 style="margin-top:0">Avstemmingar</h2>
-          <p class="dempa" style="margin-top:0">Røysta di er hemmeleg: systemet lagrar berre <i>at</i> du har røysta, ikkje <i>kva</i>. Du kan ikkje endre røysta etterpå.</p>
-          ${meg.styre ? (nyAvstemming ? `
+          <h2 style="margin-top:0">🗳️ Forslag og avstemming</h2>
+          <p class="dempa" style="margin-top:0">Alle kan leggje inn forslag, t.d. «Investere i 10 mm rør til verkstaden». Røysta er hemmeleg: systemet lagrar berre <i>at</i> du har røysta, ikkje <i>kva</i>.</p>
+          ${nyAvstemming ? `
             <div class="treff">
-              <label for="a-sp">Kva skal det røystast over?</label>
-              <input id="a-sp" maxlength="300" placeholder="t.d. Skal Ola bli ny President?">
-              <label for="a-info">Meir info (valfritt)</label>
-              <textarea id="a-info" rows="2" maxlength="2000"></textarea>
-              <label for="a-krav">Kor mange må seie ja?</label>
-              <select id="a-krav">${KRAV.map(k => `<option value="${k.v}">${k.t}</option>`).join("")}</select>
+              <label for="a-sp">Kva er forslaget?</label>
+              <input id="a-sp" maxlength="300" placeholder="t.d. Måle kjøkenet, nytt toalett, 10 mm rør til verkstaden">
+              <label for="a-info">Meir info og kostnad (valfritt)</label>
+              <textarea id="a-info" rows="2" maxlength="2000" placeholder="t.d. Kostar ca. 2500 kr"></textarea>
+              <label for="a-krav">Kor mange prosent må seie ja?</label>
+              <select id="a-krav">${KRAV.map(k => `<option value="${k.v}" ${k.v === "70" ? "selected" : ""}>${k.t}</option>`).join("")}</select>
               <div class="rad" style="margin-top:10px">
                 <button onclick="lagAvstemming()">Start avstemminga</button>
                 <button class="sekundar" onclick="nyAvstemming=false; visArsmote()">Avbryt</button>
               </div>
-            </div>` : `<button onclick="nyAvstemming=true; visArsmote()">＋ Ny avstemming</button>`) : ""}
-          ${avst.map(v => `<div class="treff">
+            </div>` : `<button onclick="nyAvstemming=true; visArsmote()">＋ Nytt forslag</button>`}
+          ${opne.map(v => `<div class="treff">
             <h3>${esc(v.question)}</h3>
             ${v.info ? `<p style="white-space:pre-line; margin:6px 0">${esc(v.info)}</p>` : ""}
-            <div class="smaa">Krav: ${esc(kravTekst(v))} · ${v.voted} av ${v.members} har røysta</div>
-            ${v.status === "open" ? `
-              ${v.i_voted ? `<p style="margin:10px 0 0">✅ Du har røysta.</p>`
-                : !v.can_vote ? `<p class="dempa" style="margin:10px 0 0">Prospect og Hangaround har ikkje røysterett.</p>` : `<div class="jane">
-                <button onclick="roeyst(${v.id}, true)">👍 Ja</button>
-                <button onclick="roeyst(${v.id}, false)">👎 Nei</button></div>`}
-              ${meg.styre ? `<button class="sekundar liten" style="margin-top:10px" onclick="stengAvstemming(${v.id})">🔒 Steng og vis resultat</button>` : ""}`
-            : `<div style="margin-top:10px">
-                <div>👍 Ja: <b>${v.yes}</b> (${pst(v.yes, v.yes + v.no)} %) · 👎 Nei: <b>${v.no}</b> (${pst(v.no, v.yes + v.no)} %)</div>
-                <div style="margin-top:6px; font-weight:bold; color:${v.passed ? "var(--gronn)" : "var(--raud)"}">${v.passed ? "✅ Vedteke" : "❌ Ikkje vedteke"}</div>
-              </div>`}
-          </div>`).join("") || '<p class="dempa">Ingen avstemmingar enno.</p>'}
+            <div class="smaa">Foreslått av ${esc(v.created_name || "–")} · Krav: ${esc(kravTekst(v))} · ${v.voted} av ${v.members} har røysta</div>
+            ${v.i_voted ? `<p style="margin:10px 0 0">✅ Du har røysta.</p>`
+              : !v.can_vote ? `<p class="dempa" style="margin:10px 0 0">Prospect og Hangaround har ikkje røysterett.</p>` : `<div class="jane">
+              <button onclick="roeyst(${v.id}, true)">👍 Ja</button>
+              <button onclick="roeyst(${v.id}, false)">👎 Nei</button></div>`}
+            ${v.can_close ? `<button class="sekundar liten" style="margin-top:10px" onclick="stengAvstemming(${v.id})">🔒 Steng og vis resultat</button>` : ""}
+          </div>`).join("") || '<p class="dempa">Ingen opne avstemmingar no.</p>'}
+          <p class="dempa" style="font-size:13px; margin-bottom:0">Avstemminga blir stengd av seg sjølv når alle med røysterett har røysta.</p>
+        </div>
+
+        <div class="kort">
+          <h2 style="margin-top:0">📜 Logg (${logg.length})</h2>
+          ${logg.map(v => `<div class="treff" style="${v.done_at ? "opacity:.75" : ""}">
+            <div class="rad" style="justify-content:space-between; align-items:flex-start">
+              <b>${esc(v.question)}</b>
+              <span style="font-weight:bold; color:${v.passed ? "var(--gronn)" : "var(--raud)"}">${v.passed ? "✅ Vedteke" : "❌ Ikkje vedteke"}</span>
+            </div>
+            ${v.info ? `<p class="dempa" style="white-space:pre-line; margin:4px 0">${esc(v.info)}</p>` : ""}
+            <div class="smaa">👍 ${v.yes} (${pst(v.yes, v.yes + v.no)} %) · 👎 ${v.no} · krav ${esc(kravTekst(v))} · avgjort ${datoKort(v.closed_at)} · foreslått av ${esc(v.created_name || "–")}</div>
+            ${v.passed ? `<div class="smaa" style="margin-top:4px">${v.done_at ? `✔ Gjennomført ${datoKort(v.done_at)}${v.done_by_name ? " (merkt av " + esc(v.done_by_name) + ")" : ""}` : "⏳ Ikkje gjennomført enno"}</div>
+              ${v.can_close ? `<button class="sekundar liten" style="margin-top:6px" onclick="merkGjennomfort(${v.id}, ${!v.done_at})">${v.done_at ? "Angre gjennomført" : "✔ Merk gjennomført"}</button>` : ""}` : ""}
+          </div>`).join("") || '<p class="dempa" style="margin:0">Ingenting avgjort enno.</p>'}
         </div>
 
         <div class="kort">
@@ -846,7 +860,7 @@
       try {
         await rpc("agm_vote_create", { p_question: document.getElementById("a-sp").value,
           p_info: document.getElementById("a-info").value, p_krav_pct: k.pct, p_strict: k.strict });
-      } catch (e) { return alert(e.message === "bad_text" ? "Skriv kva det skal røystast over." : e.message); }
+      } catch (e) { return alert(e.message === "bad_text" ? "Skriv kva forslaget er." : e.message); }
       nyAvstemming = false;
       visArsmote();
     }
@@ -856,6 +870,11 @@
       try { await rpc("agm_vote_cast", { p_id: id, p_yes: ja }); }
       catch (e) { alert({ already_voted: "Du har alt røysta.", closed: "Avstemminga er stengd.",
                           no_vote_right: "Prospect og Hangaround har ikkje røysterett." }[e.message] || e.message); }
+      visArsmote();
+    }
+
+    async function merkGjennomfort(id, ja) {
+      try { await rpc("agm_vote_done", { p_id: id, p_done: ja }); } catch (e) { alert(e.message); }
       visArsmote();
     }
 
