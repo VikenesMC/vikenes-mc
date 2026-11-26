@@ -114,6 +114,10 @@
     .komande:first-of-type { border-top: 0; }
     .komande .kdato { width: 52px; flex: none; text-align: center; font-weight: bold; color: var(--oransje); font-size: 18px; line-height: 1.1; }
     .komande .kdato span { display: block; font-size: 11px; font-weight: normal; color: var(--dempa); }
+    .korg-knapp { margin: 0; padding: 6px 12px; font-size: 18px; background: #2a2a2a; color: var(--dempa); border-radius: 20px; }
+    .korg-knapp.har { background: var(--oransje); color: #000; font-weight: bold; animation: korg-puls 2s ease-in-out 3; }
+    @keyframes korg-puls { 50% { transform: scale(1.12); } }
+    .korg-merke { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--oransje); color: #000; font-size: 12px; font-weight: bold; line-height: 20px; }
     .album-rutenett { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
     .album { cursor: pointer; background: #1b1b1b; border: 1px solid #333; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
     .album img, .album .tomt { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: flex; align-items: center; justify-content: center; font-size: 34px; background: #222; }
@@ -346,7 +350,10 @@
       vis(`
         <div class="rad" style="justify-content:space-between; margin-bottom:12px">
           <div class="meg"><b>${esc(meg.name)}</b> · <span style="color:var(--oransje)">${esc(meg.role)}</span></div>
-          <button class="sekundar liten" onclick="loggUt()">Logg ut</button>
+          <div class="rad" style="gap:8px">
+            <button id="korg-knapp" class="korg-knapp" onclick="khDel='handle'; visFane('klubbhus')" title="Handlekorg">🛒<span id="korg-tal"></span></button>
+            <button class="sekundar liten" onclick="loggUt()">Logg ut</button>
+          </div>
         </div>
         <div class="faner2">
           <button data-fane="chat" onclick="visFane('chat')">Chat</button>
@@ -356,7 +363,7 @@
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
           <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
           <button data-fane="arsmote" onclick="visFane('arsmote')">Saker</button>
-          <button data-fane="klubbhus" onclick="visFane('klubbhus')">Klubbhuset</button>
+          <button data-fane="klubbhus" onclick="visFane('klubbhus')">Klubbhuset<span id="korg-tal-fane"></span></button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.role === "President" ? `<button data-fane="president" onclick="visFane('president')">President</button>` : ""}
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
@@ -364,6 +371,8 @@
         </div>
         <div id="fane"></div>`);
       visFane(aktivFane);
+      oppdaterKorg();
+      if (!window._korgTimer) window._korgTimer = setInterval(() => { if (!document.hidden) oppdaterKorg(); }, 60000);
       if (meg.news_writer) oppdaterGjestetal();
       fornyAbonnement();
       visAppBanner();
@@ -1048,6 +1057,7 @@
     }
 
     async function visKlubbhus() {
+      oppdaterKorg();
       const meny = `<div class="rad" style="margin-bottom:12px">${KH_DELAR.map(([k, n]) =>
         `<button class="${k === khDel ? "" : "sekundar"} liten" onclick="khDel='${k}'; barRedigerer=null; visKlubbhus()">${n}</button>`).join("")}</div>`;
       const fane = document.getElementById("fane");
@@ -1190,6 +1200,19 @@
         alert("Sendt til styret. Takk!");
       } catch (e) { return alert(e.message); }
       visKlubbhus();
+    }
+
+    // Tal på ting i handlekorga – synleg øvst og på Klubbhuset-fana uansett kvar ein er
+    async function oppdaterKorg() {
+      try {
+        const [bar, kjo, l] = await Promise.all([rpc("bar_list", { p_area: "bar" }), rpc("bar_list", { p_area: "kjokken" }), rpc("shop_list")]);
+        const n = l.length + [...bar.items, ...kjo.items].filter(i => i.need > 0).length;
+        const knapp = document.getElementById("korg-knapp");
+        if (knapp) knapp.classList.toggle("har", n > 0);
+        const a = document.getElementById("korg-tal"), b = document.getElementById("korg-tal-fane");
+        if (a) a.textContent = n ? " " + n : "";
+        if (b) b.innerHTML = n ? ` <span class="korg-merke">${n}</span>` : "";
+      } catch (e) { /* ikkje kritisk */ }
     }
 
     // ---- Lager (Bar og Kjøkken): varer med maks, teljing og «Må handlast» ----
