@@ -109,6 +109,10 @@
     .skrivfelt { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
     .skrivfelt textarea { flex: 1; margin: 0; resize: none; min-height: 48px; max-height: 140px; }
     .skrivfelt button { margin: 0; height: 48px; }
+    .komande { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid #333; cursor: pointer; }
+    .komande:first-of-type { border-top: 0; }
+    .komande .kdato { width: 52px; flex: none; text-align: center; font-weight: bold; color: var(--oransje); font-size: 18px; line-height: 1.1; }
+    .komande .kdato span { display: block; font-size: 11px; font-weight: normal; color: var(--dempa); }
     .datorad { display: flex; gap: 6px; align-items: stretch; margin: 6px 0 12px; }
     .kalknapp { position: relative; display: flex; align-items: center; justify-content: center; width: 52px; flex: none;
                 margin: 0; padding: 0; font-size: 24px; background: #222; border: 1px solid #444; border-radius: 8px; cursor: pointer; overflow: hidden; }
@@ -1056,9 +1060,16 @@
       const forste = new Date(kalMnd);
       const start = new Date(forste); start.setDate(1 - ((forste.getDay() + 6) % 7));
       const slutt = new Date(start); slutt.setDate(start.getDate() + 41);
-      try { kalData = await rpc("cal_range", { p_fra: iso(start), p_til: iso(slutt) }); }
-      catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
       const idagIso = iso(new Date());
+      const omEitAar = new Date(); omEitAar.setFullYear(omEitAar.getFullYear() + 1);
+      let komande;
+      try {
+        [kalData, komande] = await Promise.all([
+          rpc("cal_range", { p_fra: iso(start), p_til: iso(slutt) }),
+          rpc("cal_range", { p_fra: idagIso, p_til: iso(omEitAar) }),
+        ]);
+      }
+      catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
       let celler = "";
       for (let i = 0; i < 42; i++) {
         const d = new Date(start); d.setDate(start.getDate() + i);
@@ -1094,6 +1105,17 @@
         </div>
         ${kalSkjema ? kalSkjemaHtml() : ""}
         <div class="kort">
+          <h2 style="margin-top:0">Kommande arrangement</h2>
+          ${komande.events.map(e => `<div class="komande" onclick="gaaTilDag('${e.dato < idagIso ? idagIso : e.dato}')">
+              <div class="kdato">${datoKort(e.dato).slice(0, 5)}<span>${e.dato.slice(0, 4)}</span></div>
+              <div style="flex:1; min-width:0">
+                <b>${esc(e.title)}</b>
+                <div class="smaa">${e.tid ? "kl. " + esc(e.tid) : ""}${e.tid && (e.place || e.arranger) ? " · " : ""}${e.place ? "📍 " + esc(e.place) : esc(e.arranger || "")}</div>
+              </div>
+              <div class="smaa" style="white-space:nowrap">${e.ja.length ? "👍 " + e.ja.length : ""}</div>
+            </div>`).join("") || '<p class="dempa" style="margin:0">Ingen arrangement lagt inn framover.</p>'}
+        </div>
+        <div class="kort" id="dagkort">
           <h2 style="margin-top:0; text-transform:capitalize">${valtDato.toLocaleDateString("nb-NO", { weekday: "long", day: "numeric", month: "long" })}</h2>
           ${dagTreff.map(treffHtml).join("") || '<p class="dempa" style="margin:0">Ingen arrangement denne dagen.</p>'}
           ${dagBorte.length ? `<p style="margin:14px 0 0"><b>Borte:</b> ${dagBorte.map(a =>
@@ -1110,6 +1132,36 @@
               </div></div>`).join("") || '<p class="dempa" style="margin:0">Du har ikkje lagt inn noko fråvær framover.</p>'}
         </div>`;
       if (kalSkjema) document.getElementById("kalskjema")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    // Klubbar for «Kven arrangerer?» – same liste og stad som på framsida (Klubbar i nærområdet)
+    const KLUBBAR = [
+      ["Vikenes MC", "Vikeneset, Volda"],
+      ["Aalesund Motorsykkelklubb", "Aalesund"], ["Atlantic Riders MC", "Elnesvågen"], ["BAB MC", "Heggjabygda"],
+      ["Bjørkedal MC", "Sunnmøre"], ["Eid MC", "Nordfjord"], ["Fenris MC", "North-West"], ["Fumbleheads MC", "Nordhordland"],
+      ["Gange Rolv HD MC", "Aalesund"], ["Hangover MC", "N.W. Area"], ["Headstone MC", "Aalesund"], ["HOD MC", "Ulsteinvik"],
+      ["Høyangbjørn MC", "Sogn og Fjordane"], ["Moonshine MC", "Romsdal"], ["Njords Men MC", "Bremanger"],
+      ["Old Nicks MC", "Nordfjordeid"], ["Red Wolf MC", "Aalesund"], ["Shakin' Brains MC", "Vestnes"],
+      ["Sioux MC", "Sunndalsøra"], ["Skallagrim MC", "Ørstavik"], ["Snorre MC", "Molde"], ["Speed Hogs MC", "Romsdal"],
+      ["Stallar MC", "Søre-Sunnmøre"], ["Thorsmen MC", "Kristiansund"], ["Twin Riders MC", "Sykkylven"],
+    ];
+    function normKlubb(t) { return t.toLowerCase().replace(/\bmc\b|motorsykkelklubb|[^a-z0-9æøå]/g, ""); }
+    // Vel ein klubb → stad blir fylt inn (berre om stad er tom eller fylt inn av ein tidlegare klubb)
+    function klubbTilStad(tekst) {
+      const n = normKlubb(tekst || "");
+      const k = n && KLUBBAR.find(([namn]) => normKlubb(namn) === n);
+      const stad = document.getElementById("t-stad");
+      if (!k || !stad) return;
+      if (!stad.value.trim() || stad.dataset.auto) { stad.value = k[1]; stad.dataset.auto = "1"; }
+    }
+
+    // Trykk på eit arrangement i lista → hopp til den dagen i kalenderen
+    async function gaaTilDag(di) {
+      kalValt = di; kalSkjema = null;
+      const d = new Date(di + "T12:00:00");
+      kalMnd = new Date(d.getFullYear(), d.getMonth(), 1);
+      await visKalender();
+      document.getElementById("dagkort")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function svarKnappar(e, kjelde) {
@@ -1159,9 +1211,11 @@
           <label for="t-til">Siste dag (om det varer fleire dagar)</label>
           ${datoFelt("t-til", e.til_dato || "", true)}
           <label for="t-arr">Kven arrangerer?</label>
-          <input id="t-arr" maxlength="80" placeholder="t.d. Vikenes MC eller Eid MC" value="${esc(e.arranger || "")}">
+          <input id="t-arr" maxlength="80" list="kal-klubbar" placeholder="Vel klubb eller skriv namnet" value="${esc(e.arranger || "")}"
+            oninput="klubbTilStad(this.value)" onchange="klubbTilStad(this.value)">
+          <datalist id="kal-klubbar">${KLUBBAR.map(([n]) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
           <label for="t-stad">Stad (valfritt)</label>
-          <input id="t-stad" maxlength="120" value="${esc(e.place || "")}">
+          <input id="t-stad" maxlength="120" value="${esc(e.place || "")}" oninput="this.dataset.auto = ''">
           <label for="t-lenkje">Lenkje (valfritt, https://…)</label>
           <input id="t-lenkje" placeholder="https://www.facebook.com/events/…" value="${esc(e.link || "")}">
           <label for="t-info">Meir info (valfritt)</label>
