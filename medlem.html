@@ -337,6 +337,7 @@
           <button data-fane="arkiv" onclick="visFane('arkiv')">Arkiv</button>
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
           <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
+          <button data-fane="arsmote" onclick="visFane('arsmote')">Årsmøte</button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.role === "President" ? `<button data-fane="president" onclick="visFane('president')">President</button>` : ""}
           ${meg.news_writer ? `<button data-fane="nyheiter" onclick="visFane('nyheiter')">Nyheiter</button>
@@ -362,6 +363,7 @@
       if (f === "nyheiter") return visNyheiter();
       if (f === "gjestebok") return visGjestebok();
       if (f === "president") return visPresident();
+      if (f === "arsmote") return visArsmote();
       try { liste = await rpc("member_list"); }
       catch (e) { return start(); }
       visMedlemmer();
@@ -709,6 +711,116 @@
         </div>`;
       lastForslag("forslag-boks", true);
       lastTilgang();
+    }
+
+    // ---------------- Årsmøte: saker og anonym avstemming ----------------
+    const KRAV = [
+      { v: "50s", t: "Fleirtal (meir enn halvparten)", pct: 50, strict: true },
+      { v: "66.67", t: "2/3 fleirtal", pct: 66.67, strict: false },
+      { v: "75", t: "3/4 fleirtal", pct: 75, strict: false },
+      { v: "100", t: "Alle må seie ja", pct: 100, strict: false },
+    ];
+    let nyAvstemming = false;
+
+    function kravTekst(v) {
+      const k = KRAV.find(k => k.pct === +v.krav_pct && k.strict === v.strict);
+      return k ? k.t : (v.strict ? "Meir enn " : "Minst ") + String(v.krav_pct).replace(".", ",") + " % ja";
+    }
+
+    async function visArsmote() {
+      let saker, avst;
+      try { [saker, avst] = await Promise.all([rpc("agm_case_list"), rpc("agm_vote_list")]); }
+      catch (e) { document.getElementById("fane").innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const pst = (n, tot) => String(tot ? Math.round(n * 1000 / tot) / 10 : 0).replace(".", ",");
+      document.getElementById("fane").innerHTML = `
+        <div class="kort">
+          <h2 style="margin-top:0">Avstemmingar</h2>
+          <p class="dempa" style="margin-top:0">Røysta di er hemmeleg: systemet lagrar berre <i>at</i> du har røysta, ikkje <i>kva</i>. Du kan ikkje endre røysta etterpå.</p>
+          ${meg.styre ? (nyAvstemming ? `
+            <div class="treff">
+              <label for="a-sp">Kva skal det røystast over?</label>
+              <input id="a-sp" maxlength="300" placeholder="t.d. Skal Ola bli ny President?">
+              <label for="a-info">Meir info (valfritt)</label>
+              <textarea id="a-info" rows="2" maxlength="2000"></textarea>
+              <label for="a-krav">Kor mange må seie ja?</label>
+              <select id="a-krav">${KRAV.map(k => `<option value="${k.v}">${k.t}</option>`).join("")}</select>
+              <div class="rad" style="margin-top:10px">
+                <button onclick="lagAvstemming()">Start avstemminga</button>
+                <button class="sekundar" onclick="nyAvstemming=false; visArsmote()">Avbryt</button>
+              </div>
+            </div>` : `<button onclick="nyAvstemming=true; visArsmote()">＋ Ny avstemming</button>`) : ""}
+          ${avst.map(v => `<div class="treff">
+            <h3>${esc(v.question)}</h3>
+            ${v.info ? `<p style="white-space:pre-line; margin:6px 0">${esc(v.info)}</p>` : ""}
+            <div class="smaa">Krav: ${esc(kravTekst(v))} · ${v.voted} av ${v.members} har røysta</div>
+            ${v.status === "open" ? `
+              ${v.i_voted ? `<p style="margin:10px 0 0">✅ Du har røysta.</p>` : `<div class="jane">
+                <button onclick="roeyst(${v.id}, true)">👍 Ja</button>
+                <button onclick="roeyst(${v.id}, false)">👎 Nei</button></div>`}
+              ${meg.styre ? `<button class="sekundar liten" style="margin-top:10px" onclick="stengAvstemming(${v.id})">🔒 Steng og vis resultat</button>` : ""}`
+            : `<div style="margin-top:10px">
+                <div>👍 Ja: <b>${v.yes}</b> (${pst(v.yes, v.yes + v.no)} %) · 👎 Nei: <b>${v.no}</b> (${pst(v.no, v.yes + v.no)} %)</div>
+                <div style="margin-top:6px; font-weight:bold; color:${v.passed ? "var(--gronn)" : "var(--raud)"}">${v.passed ? "✅ Vedteke" : "❌ Ikkje vedteke"}</div>
+              </div>`}
+          </div>`).join("") || '<p class="dempa">Ingen avstemmingar enno.</p>'}
+        </div>
+
+        <div class="kort">
+          <h2 style="margin-top:0">Meld inn sak til årsmøtet</h2>
+          <textarea id="s-tekst" rows="3" maxlength="3000" placeholder="Skriv saka di …"></textarea>
+          <label style="display:flex; gap:8px; align-items:center; margin-top:8px; cursor:pointer">
+            <input type="checkbox" id="s-anonym" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
+            Send anonymt (namnet ditt blir ikkje lagra)</label>
+          <button style="margin-top:10px" onclick="sendSak()">📨 Send inn</button>
+        </div>
+
+        <div class="kort">
+          <h2 style="margin-top:0">Innmelde saker (${saker.length})</h2>
+          ${saker.map(s => `<div class="treff">
+            <p style="white-space:pre-line; margin:0">${esc(s.body)}</p>
+            <div class="smaa" style="margin-top:6px">${s.anonymous ? "🕶️ Anonym" : "Frå " + esc(s.author_name || "–")} · ${datoKort(s.created_at)}</div>
+            ${meg.styre ? `<button class="fare liten" style="margin-top:8px" onclick="fjernSak(${s.id})">Fjern</button>` : ""}
+          </div>`).join("") || '<p class="dempa" style="margin:0">Ingen saker enno.</p>'}
+        </div>`;
+    }
+
+    async function sendSak() {
+      const tekst = document.getElementById("s-tekst").value.trim();
+      const anonym = document.getElementById("s-anonym").checked;
+      if (tekst.length < 3) return alert("Skriv saka først.");
+      if (!confirm(anonym ? "Sende saka anonymt? Ingen kan sjå kven som sende ho." : "Sende saka med namnet ditt?")) return;
+      try { await rpc("agm_case_submit", { p_body: tekst, p_anonymous: anonym }); }
+      catch (e) { return alert(e.message); }
+      visArsmote();
+    }
+
+    async function fjernSak(id) {
+      if (!confirm("Fjerne saka frå lista?")) return;
+      try { await rpc("agm_case_hide", { p_id: id }); } catch (e) { alert(e.message); }
+      visArsmote();
+    }
+
+    async function lagAvstemming() {
+      const k = KRAV.find(k => k.v === document.getElementById("a-krav").value);
+      try {
+        await rpc("agm_vote_create", { p_question: document.getElementById("a-sp").value,
+          p_info: document.getElementById("a-info").value, p_krav_pct: k.pct, p_strict: k.strict });
+      } catch (e) { return alert(e.message === "bad_text" ? "Skriv kva det skal røystast over." : e.message); }
+      nyAvstemming = false;
+      visArsmote();
+    }
+
+    async function roeyst(id, ja) {
+      if (!confirm(`Røyste ${ja ? "JA" : "NEI"}? Du kan ikkje endre røysta etterpå.`)) return;
+      try { await rpc("agm_vote_cast", { p_id: id, p_yes: ja }); }
+      catch (e) { alert({ already_voted: "Du har alt røysta.", closed: "Avstemminga er stengd." }[e.message] || e.message); }
+      visArsmote();
+    }
+
+    async function stengAvstemming(id) {
+      if (!confirm("Stengje avstemminga og vise resultatet til alle? Ingen kan røyste etterpå.")) return;
+      try { await rpc("agm_vote_close", { p_id: id }); } catch (e) { alert(e.message); }
+      visArsmote();
     }
 
     // ---------------- Styregodkjenning ----------------
