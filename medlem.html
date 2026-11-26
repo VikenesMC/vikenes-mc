@@ -1032,10 +1032,10 @@
         "9.1 Disse husreglene gjelder fra vedtaksdato og skal være tilgjengelige for alle medlemmer."]],
     ];
     const KH_DELAR = [
-      ["kjokken", "☕ Kjøkken"], ["bar", "🍻 Bar"], ["verkstad", "🔧 Verkstad"], ["lagring", "🏍️ Lagring"],
+      ["handle", "🛒 Handlekorg"], ["kjokken", "☕ Kjøkken"], ["bar", "🍻 Bar"], ["verkstad", "🔧 Verkstad"], ["lagring", "🏍️ Lagring"],
       ["brygging", "🍺 Brygging"], ["reglar", "📜 Husreglar"],
     ];
-    let khDel = "kjokken";
+    let khDel = "handle";
 
     // Reglar for ein del: heile kapittel (nr) og/eller enkeltpunkt (t.d. "1.3")
     function reglarHtml(kapittel, ekstra = []) {
@@ -1052,23 +1052,41 @@
         `<button class="${k === khDel ? "" : "sekundar"} liten" onclick="khDel='${k}'; barRedigerer=null; visKlubbhus()">${n}</button>`).join("")}</div>`;
       const fane = document.getElementById("fane");
       try {
-        if (khDel === "kjokken" || khDel === "bar") {
-          const omr = khDel;
-          const [b, l] = await Promise.all([rpc("bar_list", { p_area: omr }), omr === "kjokken" ? rpc("shop_list") : null]);
-          fane.innerHTML = meny + lagerHtml(omr, b) + (omr === "kjokken" ? `<div class="kort">
-            <h2 style="margin-top:0">📝 Ekstra handleliste</h2>
-            <p class="dempa" style="margin-top:0">For ting som ikkje er faste varer. Har du handla, trykk ✔ – då forsvinn det frå lista.</p>
+        if (khDel === "handle") {
+          // Felles handlekorg: alt som må kjøpast frå bar og kjøken + fritekst (t.d. dobørste, klubbil)
+          const [bar, kjo, l] = await Promise.all([rpc("bar_list", { p_area: "bar" }), rpc("bar_list", { p_area: "kjokken" }), rpc("shop_list")]);
+          const mangel = (b, namn) => b.items.filter(i => i.need > 0).map(i => ({ ...i, omr: namn }));
+          const lager = [...mangel(kjo, "☕ Kjøkken"), ...mangel(bar, "🍻 Bar")];
+          const tal = lager.length + l.length;
+          fane.innerHTML = meny + `<div class="kort" style="border-top-color:${tal ? "var(--gul)" : ""}">
+            <h2 style="margin-top:0">🛒 Handlekorg (${tal})</h2>
+            <p class="dempa" style="margin-top:0">Alt som må kjøpast, samla på éin stad. Skriv inn det som manglar – t.d. dobørste eller klubbil.
+              Har du handla, trykk ✔.</p>
             <div class="skrivfelt" style="margin-bottom:10px">
-              <input id="h-vare" maxlength="120" placeholder="t.d. bursdagskake, lyspærer" style="flex:1; margin:0"
+              <input id="h-vare" maxlength="120" placeholder="t.d. dobørste, lyspærer, klubbil" style="flex:1; margin:0"
                 onkeydown="if (event.key === 'Enter') leggTilVare()">
               <button onclick="leggTilVare()">＋ Legg til</button>
             </div>
+            ${l.length ? `<h3 style="margin:14px 0 4px">📝 Skrive inn</h3>` : ""}
             ${l.map(v => `<div class="komande" style="cursor:default">
                 <div style="flex:1; min-width:0"><b>${esc(v.item)}</b>
                   <div class="smaa">${esc(v.added_name || "–")} · ${datoKort(v.created_at)}</div></div>
                 <button class="liten" onclick="handla(${v.id})">✔ Handla</button>
-              </div>`).join("") || '<p class="dempa" style="margin:0">Lista er tom 👍</p>'}
-          </div>` : "");
+              </div>`).join("")}
+            ${["☕ Kjøkken", "🍻 Bar"].map(o => {
+              const varer = lager.filter(i => i.omr === o);
+              return varer.length ? `<h3 style="margin:14px 0 4px">${o}</h3>` + varer.map(i => `<div class="komande" style="cursor:default">
+                  <div style="flex:1; min-width:0"><b>Kjøp ${i.need} ${esc(i.unit)} ${esc(i.name)}</b>
+                    <div class="smaa">har ${i.count_qty} av ${i.max_qty}</div></div>
+                  <button class="liten" onclick="barHandla(${i.id}, '${esc(i.name).replace(/'/g, "")}')">✔ Handla</button>
+                </div>`).join("") : "";
+            }).join("")}
+            ${tal ? "" : '<p class="dempa" style="margin:0">Handlekorga er tom – alt er handla 👍</p>'}
+          </div>`;
+        } else if (khDel === "kjokken" || khDel === "bar") {
+          const omr = khDel;
+          const b = await rpc("bar_list", { p_area: omr });
+          fane.innerHTML = meny + lagerHtml(omr, b) + `<p class="dempa" style="font-size:14px">Ting som ikkje er faste varer, skriv du i 🛒 Handlekorg.</p>`;
           if (barRedigerer) {
             const v = b.items.find(i => i.id === barRedigerer);
             if (v) {
