@@ -8,6 +8,7 @@
 --    hake av «anonymt». Då blir namnet IKKJE lagra nokon stad.
 --  * Alle medlemmer ser sakene. Styret kan fjerne useriøse saker.
 --  * Styret lagar avstemmingar med krav (fleirtal, 2/3 …) og stengjer dei.
+--  * Prospect og Hangaround har ikkje røysterett (kan melde inn saker).
 --  * Kvart medlem røystar ja/nei éin gong. Røysta er anonym: me lagrar
 --    berre AT du har røysta (agm_voted), og tel ja/nei i to tal på
 --    avstemminga. Det finst ingen kopling mellom person og svar.
@@ -48,6 +49,14 @@ create table if not exists public.agm_voted (
   primary key (vote_id, member_id)
 );
 alter table public.agm_voted enable row level security;
+
+-- Kven har røysterett: godkjende medlemmer, men IKKJE Prospect og Hangaround (Kay 2026-11-26)
+create or replace function public._agm_kan_roeyste(p_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.members
+                  where id = p_id and status = 'approved' and role not in ('Prospect', 'Hangaround'))
+$$;
+revoke all on function public._agm_kan_roeyste(uuid) from public, anon, authenticated;
 
 -- ---------- Saker ----------
 create or replace function public.agm_case_submit(p_body text, p_anonymous boolean)
@@ -109,7 +118,7 @@ grant execute on function public.agm_vote_create(text, text, numeric, boolean) t
 create or replace function public.agm_vote_cast(p_id bigint, p_yes boolean)
 returns void language plpgsql volatile security definer set search_path = public as $$
 begin
-  if not public.is_member() then raise exception 'not_member'; end if;
+  if not public._agm_kan_roeyste(auth.uid()) then raise exception 'no_vote_right'; end if;
   if p_yes is null then raise exception 'bad_answer'; end if;
   if not exists (select 1 from public.agm_votes where id = p_id and status = 'open') then raise exception 'closed'; end if;
   insert into public.agm_voted (vote_id, member_id) values (p_id, auth.uid()) on conflict do nothing;
@@ -133,7 +142,9 @@ grant execute on function public.agm_vote_close(bigint) to authenticated;
 -- Liste. Ja/nei-tala blir berre vist når avstemminga er stengd.
 create or replace function public.agm_vote_list()
 returns json language plpgsql stable security definer set search_path = public as $$
-declare v_medl int := (select count(*) from public.members where status = 'approved');
+declare
+  v_medl int := (select count(*) from public.members where status = 'approved' and role not in ('Prospect', 'Hangaround'));
+  v_kan boolean := public._agm_kan_roeyste(auth.uid());
 begin
   if not public.is_member() then raise exception 'not_member'; end if;
   return coalesce((select json_agg(json_build_object(
@@ -141,6 +152,7 @@ begin
       'status', v.status, 'created_name', v.created_name, 'created_at', v.created_at, 'closed_at', v.closed_at,
       'voted', (select count(*) from public.agm_voted d where d.vote_id = v.id),
       'members', v_medl,
+      'can_vote', v_kan,
       'i_voted', exists (select 1 from public.agm_voted d where d.vote_id = v.id and d.member_id = auth.uid()),
       'yes', case when v.status = 'closed' then v.yes_count end,
       'no', case when v.status = 'closed' then v.no_count end,
