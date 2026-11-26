@@ -898,7 +898,7 @@
         "9.1 Disse husreglene gjelder fra vedtaksdato og skal være tilgjengelige for alle medlemmer."]],
     ];
     const KH_DELAR = [
-      ["kjokken", "☕ Kjøkken"], ["verkstad", "🔧 Verkstad"], ["lagring", "🏍️ Lagring"],
+      ["kjokken", "☕ Kjøkken"], ["bar", "🍻 Bar"], ["verkstad", "🔧 Verkstad"], ["lagring", "🏍️ Lagring"],
       ["brygging", "🍺 Brygging"], ["reglar", "📜 Husreglar"],
     ];
     let khDel = "kjokken";
@@ -934,6 +934,60 @@
                 <button class="liten" onclick="handla(${v.id})">✔ Handla</button>
               </div>`).join("") || '<p class="dempa" style="margin:0">Lista er tom – alt er handla 👍</p>'}
           </div>`;
+        } else if (khDel === "bar") {
+          const b = await rpc("bar_list");
+          const mangel = b.items.filter(i => i.need > 0);
+          const sist = b.items.filter(i => i.counted_at).sort((x, y) => y.counted_at.localeCompare(x.counted_at))[0];
+          let kat = "";
+          fane.innerHTML = meny + `<div class="kort" style="border-top-color:${mangel.length ? "var(--gul)" : ""}">
+            <h2 style="margin-top:0">🛒 Må handlast (${mangel.length})</h2>
+            ${mangel.map(i => `<div class="komande" style="cursor:default">
+                <div style="flex:1; min-width:0"><b>Kjøp ${i.need} ${esc(i.unit)} ${esc(i.name)}</b>
+                  <div class="smaa">har ${i.count_qty} av ${i.max_qty}</div></div>
+                <button class="liten" onclick="barHandla(${i.id}, '${esc(i.name).replace(/'/g, "")}')">✔ Handla</button>
+              </div>`).join("") || `<p class="dempa" style="margin:0">${b.items.length ? "Ingenting manglar – baren er full 🍻" : "Ingen varer lagt inn enno."}</p>`}
+            ${sist ? `<p class="smaa" style="margin-bottom:0">Sist talt ${datoKort(sist.counted_at)} av ${esc(sist.counted_by_name || "–")}</p>` : ""}
+          </div>
+
+          ${b.items.length ? `<div class="kort">
+            <h2 style="margin-top:0">📋 Lagerteljing</h2>
+            <p class="dempa" style="margin-top:0">Skriv kor mange som står på lageret no, og trykk «Lagre teljing». Tomme felt blir ikkje endra.</p>
+            ${b.items.map(i => {
+              const topp = i.category !== kat ? `<h3 style="margin:14px 0 4px">${esc(i.category)}</h3>` : "";
+              kat = i.category;
+              return topp + `<div class="komande" style="cursor:default">
+                <div style="flex:1; min-width:0"><b>${esc(i.name)}</b><div class="smaa">maks ${i.max_qty} ${esc(i.unit)}${i.count_qty !== null ? " · sist " + i.count_qty : ""}</div></div>
+                <input type="number" inputmode="numeric" min="0" class="bar-tal" data-id="${i.id}" placeholder="${i.count_qty ?? ""}"
+                  style="width:80px; margin:0; text-align:center">
+                ${b.can_edit ? `<button class="sekundar liten" onclick="barRediger(${i.id})">✏️</button>` : ""}
+              </div>`;
+            }).join("")}
+            <button style="margin-top:12px" onclick="barLagreTeljing()">💾 Lagre teljing</button>
+          </div>` : ""}
+
+          ${b.can_edit ? `<div class="kort" id="bar-skjema">
+            <h2 style="margin-top:0">${barRedigerer ? "Endre vare" : "＋ Ny vare"}</h2>
+            <label for="v-namn">Namn</label><input id="v-namn" maxlength="60" placeholder="t.d. Tuborg 0,33, Potetgull salt">
+            <div class="rad" style="align-items:flex-start">
+              <div style="flex:1; min-width:120px"><label for="v-kat">Kategori</label>
+                <select id="v-kat">${["Øl", "Brus", "Snacks", "Anna"].map(k => `<option>${k}</option>`).join("")}</select></div>
+              <div style="flex:1; min-width:90px"><label for="v-maks">Maks tal</label><input id="v-maks" type="number" inputmode="numeric" min="1"></div>
+              <div style="flex:1; min-width:90px"><label for="v-eining">Eining</label><input id="v-eining" maxlength="20" value="stk" placeholder="stk, kasse, pose"></div>
+            </div>
+            <div class="rad" style="margin-top:10px">
+              <button onclick="barLagreVare()">💾 Lagre vare</button>
+              ${barRedigerer ? `<button class="sekundar" onclick="barRedigerer=null; visKlubbhus()">Avbryt</button>
+                <button class="fare" onclick="barSlettVare()">Slett vare</button>` : ""}
+            </div>
+          </div>` : ""}`;
+          if (barRedigerer) {
+            const v = b.items.find(i => i.id === barRedigerer);
+            if (v) {
+              document.getElementById("v-namn").value = v.name; document.getElementById("v-kat").value = v.category;
+              document.getElementById("v-maks").value = v.max_qty; document.getElementById("v-eining").value = v.unit;
+              document.getElementById("bar-skjema").scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }
         } else if (khDel === "verkstad") {
           const l = await rpc("loan_list");
           fane.innerHTML = meny + `<div class="kort">
@@ -1028,6 +1082,40 @@
         db.functions.invoke("chat-push", { body: { action: "sak", case_id: id } }).catch(() => {});
         alert("Sendt til styret. Takk!");
       } catch (e) { return alert(e.message); }
+      visKlubbhus();
+    }
+
+    // ---- Bar ----
+    let barRedigerer = null;
+    function barRediger(id) { barRedigerer = id; visKlubbhus(); }
+    async function barLagreTeljing() {
+      const tal = [...document.querySelectorAll(".bar-tal")].filter(f => f.value !== "")
+        .map(f => ({ id: +f.dataset.id, count: Math.max(0, Math.round(+f.value)) }));
+      if (!tal.length) return alert("Skriv inn minst eitt tal.");
+      try { await rpc("bar_count", { p_counts: tal }); } catch (e) { return alert(e.message); }
+      await visKlubbhus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    async function barHandla(id, namn) {
+      if (!confirm(`Har du handla ${namn}? Lageret blir sett til maks.`)) return;
+      try { await rpc("bar_bought", { p_id: id }); } catch (e) { alert(e.message); }
+      visKlubbhus();
+    }
+    async function barLagreVare() {
+      try {
+        await rpc("bar_item_save", { p_id: barRedigerer, p_name: document.getElementById("v-namn").value,
+          p_category: document.getElementById("v-kat").value, p_max: +document.getElementById("v-maks").value || null,
+          p_unit: document.getElementById("v-eining").value });
+      } catch (e) {
+        return alert({ bad_text: "Skriv namnet på vara.", bad_max: "Skriv maks tal (minst 1)." }[e.message] || e.message);
+      }
+      barRedigerer = null;
+      visKlubbhus();
+    }
+    async function barSlettVare() {
+      if (!confirm("Slette vara frå baren?")) return;
+      try { await rpc("bar_item_delete", { p_id: barRedigerer }); } catch (e) { alert(e.message); }
+      barRedigerer = null;
       visKlubbhus();
     }
 
