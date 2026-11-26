@@ -5,6 +5,7 @@
 // action "send" → sender varsel om melding <message_id> til alle andre medlemmer
 // action "test" → sender eit testvarsel til den som spør (eigne einingar)
 // action "styre" → varsel til styret om nytt forslag <change_id> i medlemsregisteret
+// action "sak"   → varsel til styret om ny hastesak <case_id>
 //
 // VAPID-nøklane blir laga her og lagra i tabellen push_config, som berre
 // service role kan lese. Ingen treng å skrive inn hemmelege nøklar for hand.
@@ -96,6 +97,22 @@ Deno.serve(async (req) => {
       const kva = f.kind === "remove" ? `å slette ${mal?.name}` : `${mal?.name} som ${f.new_role}`;
       innhald = { title: "Styret: godkjenning", body: `${meg.name} foreslår ${kva}. Opne appen og svar.`,
                   url: "medlem.html", tag: "styre-" + f.id };
+    } else if (inn.action === "sak") {
+      // Ny hastesak «Til styret» → varsel til styret. Berre éin gong per sak (notified),
+      // og berre for ferske saker. Anonyme saker har ingen avsendar lagra.
+      const { data: s } = await db.from("agm_cases")
+        .select("id, body, author_name, anonymous, target, notified, created_at").eq("id", Number(inn.case_id)).maybeSingle();
+      if (!s || s.target !== "styret" || s.notified) return svar({ error: "not_found" }, 404);
+      if (Date.now() - new Date(s.created_at).getTime() > 5 * 60 * 1000) return svar({ error: "too_old" }, 400);
+      await db.from("agm_cases").update({ notified: true }).eq("id", s.id);
+      const { data: styret } = await db.from("members").select("id").eq("status", "approved")
+        .in("role", ["President", "Vice President", "Treasurer", "Board Member"]);
+      const ok = new Set((styret ?? []).map((m) => m.id).filter((id) => id !== user.id));
+      const { data } = await db.from("push_subscriptions").select("endpoint, p256dh, auth, member_id");
+      mottakarar = (data ?? []).filter((x) => ok.has(x.member_id));
+      const tekst = s.body.length > 140 ? s.body.slice(0, 140) + " …" : s.body;
+      innhald = { title: "⚡ Hastesak til styret", body: `${s.anonymous ? "Anonym" : s.author_name}: ${tekst}`,
+                  url: "medlem.html", tag: "sak-" + s.id };
     } else {
       return svar({ error: "bad_action" }, 400);
     }
