@@ -874,7 +874,11 @@
       try { [saker, ov] = await Promise.all([rpc("agm_case_list"), rpc("minutes_overview")]); }
       catch (e) { fane.innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
       const amSaker = saker.filter(s => s.target === "arsmote" && !s.handled);
-      const u = ov.draft || {};
+      // Kay 2026-11-26: finst det ikkje noko utkast, startar arket med teksten frå førre årsmøte
+      // (punkt 1–11, stad, møteleiar og referent). Dato, signaturar, innkomne saker og eventuelt startar tomme.
+      const fjor = !ov.draft && ov.archived.length ? ov.archived[0] : null;
+      const u = ov.draft || (fjor ? { place: fjor.place, leader: fjor.leader, referent: fjor.referent,
+        points: (fjor.points || []).map((t, i) => i < 11 ? t : "") } : {});
       const p = u.points || [];
       const sakerHtml = amSaker.map(s => `<li>${esc(s.body)} <span class="smaa">(${s.anonymous ? "anonym" : esc(s.author_name || "–")})</span></li>`).join("");
       fane.innerHTML = `
@@ -892,7 +896,8 @@
         ${ov.can_edit ? `<div class="kort" id="notatark">
           <h2 style="margin-top:0">📝 Årsmøte – notatark</h2>
           <p class="dempa" style="margin-top:0">Fyll ut under møtet. «Lagre utkast» held på det du har skrive. «Arkiver» lagrar referatet nedst på sida og tømer arket til neste år.
-            ${u.updated_at ? `<br>Sist lagra ${datoKort(u.updated_at)} av ${esc(u.updated_by_name || "–")}.` : ""}</p>
+            ${u.updated_at ? `<br>Sist lagra ${datoKort(u.updated_at)} av ${esc(u.updated_by_name || "–")}.` : ""}
+            ${fjor ? `<br><b style="color:var(--oransje)">Teksten er henta frå årsmøtet ${datoKort(fjor.dato)}.</b> Endre berre det som er nytt.` : ""}</p>
           <div class="rad" style="align-items:flex-start">
             <div style="flex:1; min-width:150px"><label for="m-dato">Dato</label>${datoFelt("m-dato", u.dato || "", true)}</div>
             <div style="flex:1; min-width:150px"><label for="m-stad">Sted</label><input id="m-stad" maxlength="120" value="${esc(u.place || "Vikeneset, Volda")}"></div>
