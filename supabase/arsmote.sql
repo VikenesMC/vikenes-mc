@@ -6,6 +6,8 @@
 -- Bestemt av Kay 2026-11-26:
 --  * Alle medlemmer kan melde inn saker. Namnet står på saka, men ein kan
 --    hake av «anonymt». Då blir namnet IKKJE lagra nokon stad.
+--  * Ei sak går anten «Til styret – hastar» (styret får pushvarsel) eller
+--    «Til årsmøtet». Styret kan merkje hastesaker som behandla.
 --  * Alle medlemmer ser sakene. Styret kan fjerne useriøse saker.
 --  * Styret lagar avstemmingar med krav (fleirtal, 2/3 …) og stengjer dei.
 --  * Prospect og Hangaround har ikkje røysterett (kan melde inn saker).
@@ -25,6 +27,12 @@ create table if not exists public.agm_cases (
   created_at  timestamptz not null default now()
 );
 alter table public.agm_cases enable row level security;
+-- Kay 2026-11-26: «Til styret – hastar» eller «Til årsmøtet»
+alter table public.agm_cases add column if not exists target   text    not null default 'arsmote';
+alter table public.agm_cases add column if not exists handled  boolean not null default false;
+alter table public.agm_cases add column if not exists notified boolean not null default false;
+alter table public.agm_cases drop constraint if exists agm_cases_target_check;
+alter table public.agm_cases add constraint agm_cases_target_check check (target in ('styret', 'arsmote'));
 
 create table if not exists public.agm_votes (
   id           bigint generated always as identity primary key,
@@ -59,23 +67,25 @@ $$;
 revoke all on function public._agm_kan_roeyste(uuid) from public, anon, authenticated;
 
 -- ---------- Saker ----------
-create or replace function public.agm_case_submit(p_body text, p_anonymous boolean)
+drop function if exists public.agm_case_submit(text, boolean);
+create or replace function public.agm_case_submit(p_body text, p_anonymous boolean, p_target text default 'arsmote')
 returns bigint language plpgsql volatile security definer set search_path = public as $$
 declare v_id bigint;
 begin
   if not public.is_member() then raise exception 'not_member'; end if;
   p_body := trim(coalesce(p_body, ''));
   if length(p_body) < 3 or length(p_body) > 3000 then raise exception 'bad_text'; end if;
+  if p_target not in ('styret', 'arsmote') then raise exception 'bad_target'; end if;
   if coalesce(p_anonymous, false) then
-    insert into public.agm_cases (body, anonymous) values (p_body, true) returning id into v_id;
+    insert into public.agm_cases (body, anonymous, target) values (p_body, true, p_target) returning id into v_id;
   else
-    insert into public.agm_cases (body, author_id, author_name, anonymous)
-    values (p_body, auth.uid(), (select name from public.members where id = auth.uid()), false)
+    insert into public.agm_cases (body, author_id, author_name, anonymous, target)
+    values (p_body, auth.uid(), (select name from public.members where id = auth.uid()), false, p_target)
     returning id into v_id;
   end if;
   return v_id;
 end $$;
-grant execute on function public.agm_case_submit(text, boolean) to authenticated;
+grant execute on function public.agm_case_submit(text, boolean, text) to authenticated;
 
 create or replace function public.agm_case_list()
 returns json language plpgsql stable security definer set search_path = public as $$
@@ -83,10 +93,20 @@ begin
   if not public.is_member() then raise exception 'not_member'; end if;
   return coalesce((select json_agg(json_build_object(
       'id', c.id, 'body', c.body, 'author_name', c.author_name, 'anonymous', c.anonymous,
-      'created_at', c.created_at, 'mine', c.author_id = auth.uid()) order by c.created_at desc)
+      'target', c.target, 'handled', c.handled,
+      'created_at', c.created_at, 'mine', c.author_id = auth.uid()) order by c.handled, c.created_at desc)
     from public.agm_cases c where not c.hidden), '[]'::json);
 end $$;
 grant execute on function public.agm_case_list() to authenticated;
+
+-- Styret merkjer ei sak som behandla (eller tek merket vekk)
+create or replace function public.agm_case_handled(p_id bigint, p_handled boolean)
+returns void language plpgsql volatile security definer set search_path = public as $$
+begin
+  if not public._is_styre(auth.uid()) then raise exception 'not_allowed'; end if;
+  update public.agm_cases set handled = coalesce(p_handled, true) where id = p_id;
+end $$;
+grant execute on function public.agm_case_handled(bigint, boolean) to authenticated;
 
 -- Styret fjernar ei sak (blir skjult, ikkje sletta)
 create or replace function public.agm_case_hide(p_id bigint)
