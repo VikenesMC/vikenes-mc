@@ -1618,8 +1618,10 @@
 
     // ---------------- MC Quiz: snarvegar til quiz-sidene ----------------
     function visQuiz() {
+      // «v=2» gjer adressa ny, så telefonar som har lagra den gamle omdirigeringa til
+      // vikenesmc.no (frå då domenet var kopla på ei kort stund) ikkje blir sende dit.
       const knapp = (href, ikon, tittel, tekst) => `
-        <a class="knapp" href="${href}" target="_blank" rel="noopener"
+        <a class="knapp" href="${href}${href.includes("?") ? "&" : "?"}v=2" target="_blank" rel="noopener"
            style="display:block; text-align:left; margin-top:10px; background:#2a2a2a; color:#fff; border-left:4px solid var(--oransje)">
           <span style="font-size:20px">${ikon}</span> <b>${tittel}</b><br>
           <span style="font-weight:normal; font-size:14px; color:var(--dempa)">${tekst}</span></a>`;
