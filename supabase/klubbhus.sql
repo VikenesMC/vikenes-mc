@@ -119,42 +119,118 @@ returns text language sql stable as $$
               else (extract(year from current_date)::int - 1) || '/' || extract(year from current_date)::int end
 $$;
 
+-- Pris og betaling (Kay 2026-11-26)
+--   Fullt medlem: 2 syklar gratis
+--   Prospect:     1 gratis + 1 til 1000 kr
+--   Hangaround:   1 sykkel til 1000 kr
+--   Utanfor klubben (5.3, styret godkjenner): 1800 kr per sykkel – blir lagt inn av regnskap/President
+--   «Betalt» blir merkt av dei med regnskapstilgang (og President).
+alter table public.storage_bikes add column if not exists price        int     not null default 0;
+alter table public.storage_bikes add column if not exists paid         boolean not null default false;
+alter table public.storage_bikes add column if not exists paid_at      timestamptz;
+alter table public.storage_bikes add column if not exists paid_by_name text;
+alter table public.storage_bikes add column if not exists guest_name   text;   -- ikkje-medlem
+alter table public.storage_bikes add column if not exists registered_by uuid references public.members(id) on delete set null;
+
+-- Pris for sykkel nr. p_nr (1, 2 …) for ei rolle. null = ikkje lov (over maks).
+create or replace function public._lagringspris(p_role text, p_nr int)
+returns int language sql immutable as $$
+  select case
+    when p_role = 'Hangaround' then case when p_nr = 1 then 1000 end
+    when p_role = 'Prospect'   then case when p_nr = 1 then 0 when p_nr = 2 then 1000 end
+    else                            case when p_nr <= 2 then 0 end
+  end
+$$;
+
+-- Rekn om prisen på ubetalte syklar til eit medlem (t.d. etter at ein er fjerna)
+create or replace function public._lagring_prisar(p_member uuid, p_sesong text)
+returns void language plpgsql volatile security definer set search_path = public as $$
+declare v_rolle text := (select role from public.members where id = p_member); r record; n int := 0;
+begin
+  for r in select id, paid from public.storage_bikes where member_id = p_member and season = p_sesong order by created_at, id loop
+    n := n + 1;
+    if not r.paid then
+      update public.storage_bikes set price = coalesce(public._lagringspris(v_rolle, n), 0) where id = r.id;
+    end if;
+  end loop;
+end $$;
+revoke all on function public._lagring_prisar(uuid, text) from public, anon, authenticated;
+
 create or replace function public.storage_list()
 returns json language plpgsql stable security definer set search_path = public as $$
-declare v_sesong text := public._lagringssesong();
+declare v_sesong text := public._lagringssesong(); v_regn boolean := public.has_access('regnskap');
 begin
   if not public.is_member() then raise exception 'not_member'; end if;
-  return json_build_object('season', v_sesong, 'bikes', coalesce((select json_agg(json_build_object(
-      'id', b.id, 'member_name', b.member_name, 'bike', b.bike, 'reg_nr', b.reg_nr, 'owner_note', b.owner_note,
-      'insured', b.insured, 'mine', b.member_id = auth.uid()) order by b.member_name, b.created_at)
+  return json_build_object('season', v_sesong, 'can_pay', v_regn,
+    'total', (select coalesce(sum(price), 0) from public.storage_bikes where season = v_sesong),
+    'paid_total', (select coalesce(sum(price), 0) from public.storage_bikes where season = v_sesong and paid),
+    'bikes', coalesce((select json_agg(json_build_object(
+      'id', b.id, 'member_name', coalesce(b.guest_name, b.member_name), 'guest', b.guest_name is not null,
+      'bike', b.bike, 'reg_nr', b.reg_nr, 'owner_note', b.owner_note, 'insured', b.insured,
+      'price', b.price, 'paid', b.paid, 'paid_at', b.paid_at, 'paid_by_name', b.paid_by_name,
+      'mine', b.member_id = auth.uid()) order by (b.guest_name is not null), coalesce(b.guest_name, b.member_name), b.created_at)
     from public.storage_bikes b where b.season = v_sesong), '[]'::json));
 end $$;
 grant execute on function public.storage_list() to authenticated;
 
--- Husregel 5.1: eigen MC + éin ekstra (eigen eller nærmaste familie) → maks 2 per medlem
+-- Medlem melder inn eigen sykkel. Maks og pris etter rolla.
 create or replace function public.storage_add(p_bike text, p_reg_nr text, p_owner_note text, p_insured boolean)
 returns bigint language plpgsql volatile security definer set search_path = public as $$
 declare v_id bigint; v_sesong text := public._lagringssesong();
+  v_rolle text := (select role from public.members where id = auth.uid()); v_nr int; v_pris int;
 begin
   if not public.is_member() then raise exception 'not_member'; end if;
   if not coalesce(p_insured, false) then raise exception 'not_insured'; end if;
   p_bike := trim(coalesce(p_bike, ''));
   if length(p_bike) < 2 or length(p_bike) > 100 then raise exception 'bad_text'; end if;
-  if (select count(*) from public.storage_bikes where member_id = auth.uid() and season = v_sesong) >= 2 then
-    raise exception 'max_two';
-  end if;
-  insert into public.storage_bikes (season, member_id, member_name, bike, reg_nr, owner_note, insured)
+  v_nr := (select count(*) from public.storage_bikes where member_id = auth.uid() and season = v_sesong) + 1;
+  v_pris := public._lagringspris(v_rolle, v_nr);
+  if v_pris is null then raise exception 'max_bikes'; end if;
+  insert into public.storage_bikes (season, member_id, member_name, bike, reg_nr, owner_note, insured, price, registered_by)
   values (v_sesong, auth.uid(), (select name from public.members where id = auth.uid()), p_bike,
-          nullif(upper(trim(coalesce(p_reg_nr, ''))), ''), nullif(left(trim(coalesce(p_owner_note, '')), 100), ''), true)
+          nullif(upper(trim(coalesce(p_reg_nr, ''))), ''), nullif(left(trim(coalesce(p_owner_note, '')), 100), ''), true,
+          v_pris, auth.uid())
   returning id into v_id;
   return v_id;
 end $$;
 grant execute on function public.storage_add(text, text, text, boolean) to authenticated;
 
-create or replace function public.storage_remove(p_id bigint)
+-- Regnskap/President legg inn sykkel for nokon utanfor klubben (1800 kr)
+create or replace function public.storage_add_guest(p_name text, p_bike text, p_reg_nr text, p_insured boolean)
+returns bigint language plpgsql volatile security definer set search_path = public as $$
+declare v_id bigint;
+begin
+  if not public.has_access('regnskap') then raise exception 'not_allowed'; end if;
+  if not coalesce(p_insured, false) then raise exception 'not_insured'; end if;
+  p_name := trim(coalesce(p_name, '')); p_bike := trim(coalesce(p_bike, ''));
+  if length(p_name) < 2 or length(p_name) > 80 or length(p_bike) < 2 or length(p_bike) > 100 then raise exception 'bad_text'; end if;
+  insert into public.storage_bikes (season, guest_name, bike, reg_nr, owner_note, insured, price, registered_by)
+  values (public._lagringssesong(), p_name, p_bike, nullif(upper(trim(coalesce(p_reg_nr, ''))), ''), 'Utanfor klubben', true, 1800, auth.uid())
+  returning id into v_id;
+  return v_id;
+end $$;
+grant execute on function public.storage_add_guest(text, text, text, boolean) to authenticated;
+
+create or replace function public.storage_set_paid(p_id bigint, p_paid boolean)
 returns void language plpgsql volatile security definer set search_path = public as $$
 begin
-  delete from public.storage_bikes where id = p_id and (member_id = auth.uid() or public._is_styre(auth.uid()));
+  if not public.has_access('regnskap') then raise exception 'not_allowed'; end if;
+  update public.storage_bikes
+     set paid = coalesce(p_paid, true),
+         paid_at = case when coalesce(p_paid, true) then now() end,
+         paid_by_name = case when coalesce(p_paid, true) then (select name from public.members where id = auth.uid()) end
+   where id = p_id;
+end $$;
+grant execute on function public.storage_set_paid(bigint, boolean) to authenticated;
+
+create or replace function public.storage_remove(p_id bigint)
+returns void language plpgsql volatile security definer set search_path = public as $$
+declare v_medl uuid; v_sesong text;
+begin
+  delete from public.storage_bikes where id = p_id
+     and (member_id = auth.uid() or public._is_styre(auth.uid()) or public.has_access('regnskap'))
+  returning member_id, season into v_medl, v_sesong;
   if not found then raise exception 'not_allowed'; end if;
+  if v_medl is not null then perform public._lagring_prisar(v_medl, v_sesong); end if;
 end $$;
 grant execute on function public.storage_remove(bigint) to authenticated;
