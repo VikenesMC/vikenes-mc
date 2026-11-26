@@ -363,6 +363,7 @@
           <button data-fane="quiz" onclick="visFane('quiz')">MC Quiz</button>
           <button data-fane="regnskap" onclick="visFane('regnskap')">Regnskap</button>
           <button data-fane="arsmote" onclick="visFane('arsmote')">Saker</button>
+          <button data-fane="aarsmote" onclick="visFane('aarsmote')">Årsmøte</button>
           <button data-fane="klubbhus" onclick="visFane('klubbhus')">Klubbhuset<span id="korg-tal-fane"></span></button>
           <button data-fane="medlemmer" onclick="visFane('medlemmer')">Medlemmer</button>
           ${meg.role === "President" ? `<button data-fane="president" onclick="visFane('president')">President</button>` : ""}
@@ -392,6 +393,7 @@
       if (f === "gjestebok") return visGjestebok();
       if (f === "president") return visPresident();
       if (f === "arsmote") return visArsmote();
+      if (f === "aarsmote") return visAarsmote();
       if (f === "bilete") return visBilete();
       if (f === "klubbhus") return visKlubbhus();
       try { liste = await rpc("member_list"); }
@@ -811,20 +813,16 @@
         </div>
 
         <div class="kort">
-          <h2 style="margin-top:0">Meld inn sak</h2>
+          <h2 style="margin-top:0">⚡ Meld inn sak til styret</h2>
+          <p class="dempa" style="margin-top:0">For saker som må takast tak i no. Styret får varsel med ein gong. Saker til årsmøtet meldar du inn under fana «Årsmøte».</p>
           <textarea id="s-tekst" rows="3" maxlength="3000" placeholder="Skriv saka di …"></textarea>
           <label style="display:flex; gap:8px; align-items:center; margin-top:8px; cursor:pointer">
             <input type="checkbox" id="s-anonym" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
             Send anonymt (namnet ditt blir ikkje lagra)</label>
-          <div class="rad" style="margin-top:10px">
-            <button onclick="sendSak('styret')">⚡ Til styret – hastar</button>
-            <button class="sekundar" onclick="sendSak('arsmote')">📅 Til årsmøtet</button>
-          </div>
-          <p class="dempa" style="font-size:13px; margin-bottom:0">Hastar det, får styret varsel med ein gong. Elles blir saka teken opp på årsmøtet.</p>
+          <button style="margin-top:10px" onclick="sendSak('styret')">⚡ Send til styret</button>
         </div>
 
-        ${sakListe(saker.filter(s => s.target === "styret"), "⚡ Til styret", true)}
-        ${sakListe(saker.filter(s => s.target !== "styret"), "📅 Til årsmøtet", false)}`;
+        ${sakListe(saker.filter(s => s.target === "styret"), "⚡ Til styret", true)}`;
     }
 
     function sakListe(liste, tittel, hast) {
@@ -844,24 +842,110 @@
       const tekst = document.getElementById("s-tekst").value.trim();
       const anonym = document.getElementById("s-anonym").checked;
       if (tekst.length < 3) return alert("Skriv saka først.");
-      const kvar = mal === "styret" ? "til styret (hastar – styret får varsel)" : "til årsmøtet";
+      const kvar = mal === "styret" ? "til styret (styret får varsel)" : "til årsmøtet";
       if (!confirm(`Sende saka ${kvar}${anonym ? " anonymt? Ingen kan sjå kven som sende ho." : " med namnet ditt?"}`)) return;
       let id;
       try { id = await rpc("agm_case_submit", { p_body: tekst, p_anonymous: anonym, p_target: mal }); }
       catch (e) { return alert(e.message); }
       if (mal === "styret") db.functions.invoke("chat-push", { body: { action: "sak", case_id: id } }).catch(() => {});
-      visArsmote();
+      visFane(aktivFane);
     }
 
     async function sakBehandla(id, ja) {
       try { await rpc("agm_case_handled", { p_id: id, p_handled: ja }); } catch (e) { alert(e.message); }
-      visArsmote();
+      visFane(aktivFane);
     }
 
     async function fjernSak(id) {
       if (!confirm("Fjerne saka frå lista?")) return;
       try { await rpc("agm_case_hide", { p_id: id }); } catch (e) { alert(e.message); }
-      visArsmote();
+      visFane(aktivFane);
+    }
+
+    // ---------------- Årsmøte: innmelde saker, notatark og arkiverte referat ----------------
+    // Punkta frå «ÅRSMØTE – NOTATARK» (Kay sitt dokument, ordrett)
+    const AM_PUNKT = ["Godkjenning av innkalling og saksliste", "Styrets årsmelding", "Regnskap og økonomi", "Kontingent",
+      "Budsjett og investeringer", "Aktiviteter og arrangement", "Prosjekter", "Fordeling av ansvar", "Val av styre",
+      "Komiteer", "Vedtektsendringer", "Innkomne saker", "Eventuelt / Avslutning"];
+
+    async function visAarsmote() {
+      const fane = document.getElementById("fane");
+      let saker, ov;
+      try { [saker, ov] = await Promise.all([rpc("agm_case_list"), rpc("minutes_overview")]); }
+      catch (e) { fane.innerHTML = `<p class="feil">${esc(e.message)}</p>`; return; }
+      const amSaker = saker.filter(s => s.target === "arsmote" && !s.handled);
+      const u = ov.draft || {};
+      const p = u.points || [];
+      const sakerHtml = amSaker.map(s => `<li>${esc(s.body)} <span class="smaa">(${s.anonymous ? "anonym" : esc(s.author_name || "–")})</span></li>`).join("");
+      fane.innerHTML = `
+        <div class="kort">
+          <h2 style="margin-top:0">📅 Meld inn sak til årsmøtet</h2>
+          <textarea id="s-tekst" rows="3" maxlength="3000" placeholder="Skriv saka di …"></textarea>
+          <label style="display:flex; gap:8px; align-items:center; margin-top:8px; cursor:pointer">
+            <input type="checkbox" id="s-anonym" style="width:22px; height:22px; margin:0; accent-color:var(--oransje)">
+            Send anonymt (namnet ditt blir ikkje lagra)</label>
+          <button style="margin-top:10px" onclick="sendSak('arsmote')">📨 Send til årsmøtet</button>
+        </div>
+
+        ${sakListe(amSaker, "Innmelde saker til neste årsmøte", false)}
+
+        ${ov.can_edit ? `<div class="kort" id="notatark">
+          <h2 style="margin-top:0">📝 Årsmøte – notatark</h2>
+          <p class="dempa" style="margin-top:0">Fyll ut under møtet. «Lagre utkast» held på det du har skrive. «Arkiver» lagrar referatet nedst på sida og tømer arket til neste år.
+            ${u.updated_at ? `<br>Sist lagra ${datoKort(u.updated_at)} av ${esc(u.updated_by_name || "–")}.` : ""}</p>
+          <div class="rad" style="align-items:flex-start">
+            <div style="flex:1; min-width:150px"><label for="m-dato">Dato</label>${datoFelt("m-dato", u.dato || "", true)}</div>
+            <div style="flex:1; min-width:150px"><label for="m-stad">Sted</label><input id="m-stad" maxlength="120" value="${esc(u.place || "Vikeneset, Volda")}"></div>
+          </div>
+          <div class="rad" style="align-items:flex-start">
+            <div style="flex:1; min-width:150px"><label for="m-leiar">Møteleder</label><input id="m-leiar" maxlength="80" value="${esc(u.leader || "")}"></div>
+            <div style="flex:1; min-width:150px"><label for="m-ref">Referent</label><input id="m-ref" maxlength="80" value="${esc(u.referent || "")}"></div>
+          </div>
+          ${AM_PUNKT.map((t, i) => `<label for="m-p${i}" style="margin-top:14px; font-weight:bold">${i + 1}. ${esc(t)}</label>
+            ${i === 11 ? (sakerHtml ? `<ul style="margin:4px 0 6px; padding-left:20px">${sakerHtml}</ul>` : '<p class="dempa" style="margin:4px 0">Ingen innmelde saker.</p>') : ""}
+            <textarea id="m-p${i}" rows="2" maxlength="5000">${esc(p[i] || "")}</textarea>`).join("")}
+          <h3 style="margin-top:18px">Signaturer</h3>
+          <div class="rad" style="align-items:flex-start">
+            <div style="flex:1; min-width:150px"><label for="m-sl">Møteleder</label><input id="m-sl" maxlength="80" value="${esc(u.sign_leader || "")}"></div>
+            <div style="flex:1; min-width:150px"><label for="m-sld">Dato</label>${datoFelt("m-sld", u.sign_leader_dato || "", true)}</div>
+          </div>
+          <div class="rad" style="align-items:flex-start">
+            <div style="flex:1; min-width:150px"><label for="m-sr">Referent</label><input id="m-sr" maxlength="80" value="${esc(u.sign_referent || "")}"></div>
+            <div style="flex:1; min-width:150px"><label for="m-srd">Dato</label>${datoFelt("m-srd", u.sign_referent_dato || "", true)}</div>
+          </div>
+          <div class="rad" style="margin-top:14px">
+            <button class="sekundar" onclick="lagreReferat(false)">💾 Lagre utkast</button>
+            <button onclick="lagreReferat(true)">📁 Arkiver referatet</button>
+          </div>
+        </div>` : ""}
+
+        <div class="kort">
+          <h2 style="margin-top:0">📚 Tidlegare årsmøte</h2>
+          ${ov.archived.map(m => `<details class="reglar">
+              <summary>Årsmøte ${datoKort(m.dato)}${m.place ? " – " + esc(m.place) : ""}</summary>
+              <p><b>Møteleder:</b> ${esc(m.leader || "–")} · <b>Referent:</b> ${esc(m.referent || "–")}</p>
+              ${AM_PUNKT.map((t, i) => `<p><b>${i + 1}. ${esc(t)}</b>
+                ${i === 11 && m.cases.length ? `<br>${m.cases.map(c => "• " + esc(c.body) + " (" + esc(c.from) + ")").join("<br>")}` : ""}
+                ${(m.points[i] || "").trim() ? "<br>" + esc(m.points[i]).replace(/\n/g, "<br>") : (i === 11 && m.cases.length ? "" : '<br><span class="dempa">–</span>')}</p>`).join("")}
+              <p><b>Signaturer</b><br>Møteleder: ${esc(m.sign_leader || "–")}${m.sign_leader_dato ? " · " + datoKort(m.sign_leader_dato) : ""}
+                <br>Referent: ${esc(m.sign_referent || "–")}${m.sign_referent_dato ? " · " + datoKort(m.sign_referent_dato) : ""}</p>
+            </details>`).join("") || '<p class="dempa" style="margin:0">Ingen arkiverte referat enno.</p>'}
+        </div>`;
+    }
+
+    async function lagreReferat(arkiver) {
+      const d = lesDato("m-dato"), sld = lesDato("m-sld"), srd = lesDato("m-srd");
+      if (d === null || sld === null || srd === null) return alert("Sjekk datoane (DD/MM-ÅÅÅÅ).");
+      if (arkiver && !d) return alert("Skriv datoen for årsmøtet før du arkiverer.");
+      if (arkiver && !confirm("Arkivere referatet? Det blir lagra under «Tidlegare årsmøte», innmelde saker blir tekne med, og arket blir tømt.")) return;
+      const data = { dato: d, place: document.getElementById("m-stad").value, leader: document.getElementById("m-leiar").value,
+        referent: document.getElementById("m-ref").value, points: AM_PUNKT.map((_, i) => document.getElementById("m-p" + i).value),
+        sign_leader: document.getElementById("m-sl").value, sign_leader_dato: sld,
+        sign_referent: document.getElementById("m-sr").value, sign_referent_dato: srd };
+      try { await rpc(arkiver ? "minutes_archive" : "minutes_save", { p_data: data }); }
+      catch (e) { return alert(e.message === "no_date" ? "Skriv datoen for årsmøtet." : e.message); }
+      if (!arkiver) alert("Utkastet er lagra.");
+      visAarsmote();
     }
 
     async function lagAvstemming() {
