@@ -606,7 +606,15 @@
       if (!el) return;
       const bedt = new URLSearchParams(location.search).has("app");
       // Berre innlogga, godkjende medlemmer blir oppmoda om å installere appen
-      if (erApp || !meg || meg.status !== "approved") { el.innerHTML = ""; return; }
+      if (!meg || meg.status !== "approved") { el.innerHTML = ""; return; }
+      if (erApp) {
+        // Inne i appen: vis QR-kode så andre kan skanne og laste ned appen
+        el.innerHTML = `<div class="kort" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
+          <img src="app-ikon.png" alt="" style="width:48px; height:48px; border-radius:12px">
+          <div style="flex:1"><b>Del appen</b><br><span class="dempa" style="font-size:14px">La andre skanne og laste ned appen</span></div>
+          <button style="margin:0" onclick="visAppQR()">📲 QR-kode</button></div>`;
+        return;
+      }
       if (installHending) {
         el.innerHTML = `<div class="kort" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
           <img src="app-ikon.png" alt="" style="width:48px; height:48px; border-radius:12px">
