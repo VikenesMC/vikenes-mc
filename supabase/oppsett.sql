@@ -34,7 +34,8 @@ alter table public.events add column if not exists start_interval_min int not nu
 alter table public.events add column if not exists active_route_id bigint;
 alter table public.events add column if not exists finish_code text not null default public.ny_kode(12);
 alter table public.events add column if not exists finish_name text not null default 'Klubbhuset til Vikenes MC';
-alter table public.events add column if not exists finish_address text not null default 'Vikenesvegen 8, 6100 Volda';
+alter table public.events add column if not exists finish_address text not null default 'Ørstavegen 14, 6100 Volda';
+alter table public.events alter column finish_address set default 'Ørstavegen 14, 6100 Volda';
 
 insert into public.events (id, name, status)
 overriding system value
