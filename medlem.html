@@ -634,8 +634,33 @@
           <b>📲 Installer appen:</b> trykk på menyen <b>⋮</b> øvst i Chrome og vel <b>«Installer app»</b>
           eller <b>«Legg til på startsida»</b>.</div>`;
       } else {
-        el.innerHTML = "";
+        // Mobil utan installer-hending: knapp som viser korleis ein lastar ned appen
+        el.innerHTML = `<div class="kort" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
+          <img src="app-ikon.png" alt="" style="width:48px; height:48px; border-radius:12px">
+          <div style="flex:1"><b>Vikenes MC-appen</b><br><span class="dempa" style="font-size:14px">Legg medlemssida på heimeskjermen</span></div>
+          <button style="margin:0" onclick="visAppHjelp()">📲 Last ned appen</button></div>`;
       }
+    }
+
+    // Rettleiing for å leggje appen på heimeskjermen (iPhone / Android)
+    function visAppHjelp() {
+      const bak = document.createElement("div");
+      bak.className = "modal-bak";
+      bak.innerHTML = `<div class="modal" style="text-align:left">
+        <h2 style="margin-top:0; text-align:center">📲 Last ned appen</h2>
+        ${erIOS ? `<ol style="margin:8px 0 16px; padding-left:20px; font-size:16px; line-height:1.6">
+            <li>Opne sida i <b>Safari</b></li>
+            <li>Trykk på <b>Del</b>-knappen (firkanten med pil opp)</li>
+            <li>Vel <b>«Legg til på Heim-skjerm»</b> og trykk <b>Legg til</b></li>
+          </ol>`
+        : `<ol style="margin:8px 0 16px; padding-left:20px; font-size:16px; line-height:1.6">
+            <li>Opne sida i <b>Chrome</b></li>
+            <li>Trykk på menyen <b>⋮</b> øvst til høgre</li>
+            <li>Vel <b>«Installer app»</b> eller <b>«Legg til på startsida»</b></li>
+          </ol>`}
+        <button class="stor" onclick="this.closest('.modal-bak').remove()">Lukk</button>
+      </div>`;
+      document.body.appendChild(bak);
     }
 
     // QR-kode til medlemssida, så appen kan installerast på mobilen
